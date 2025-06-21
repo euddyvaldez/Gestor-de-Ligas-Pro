@@ -16,7 +16,7 @@ import Select from '../components/ui/Select';
 import Modal from '../components/ui/Modal';
 import { BaseballDiamondSVG } from '../components/ui/BaseballDiamondSVG'; // Updated import
 import IconButton, { EditIcon, SettingsIcon, SaveIcon } from '../components/ui/IconButton';
-import { MdDeleteForever, MdOutlineLeaderboard, MdUndo, MdNavigateBefore, MdNavigateNext } from 'react-icons/md'; // Added MdUndo, MdNavigateBefore, MdNavigateNext
+import { MdDeleteForever, MdOutlineLeaderboard, MdUndo, MdNavigateBefore, MdNavigateNext, MdOutlineFileDownload } from 'react-icons/md'; // Added MdUndo, MdNavigateBefore, MdNavigateNext, MdOutlineFileDownload
 import Table, { TableColumn } from '../components/ui/Table';
 import ConfirmationModal from '../components/ui/ConfirmationModal';
 import ErrorAdvancementModal from '../components/partidos/ErrorAdvancementModal';
@@ -2169,6 +2169,65 @@ export const PartidosPage: React.FC = () => {
     link.style.visibility = 'hidden'; document.body.appendChild(link);
     link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
   };
+  
+  const handleExportBoxScoreCSV = () => {
+    if (!currentPartido) {
+        alert("No hay partido en curso para exportar el Box Score.");
+        return;
+    }
+
+    const { maxInnings, visitanteStats, localStats, nombreEquipoVisitante, nombreEquipoLocal, lineupVisitante, lineupLocal, fecha } = currentPartido;
+    let csvString = "";
+
+    // Line Score Section
+    const lineScoreHeaders = ["Equipo", ...[...Array(maxInnings)].map((_, i) => String(i + 1)), "C", "H", "E"];
+    csvString += Papa.unparse({
+        fields: lineScoreHeaders,
+        data: [
+            [nombreEquipoVisitante, ...[...Array(maxInnings)].map((_, i) => visitanteStats.runsPerInning[i + 1] ?? 0), visitanteStats.totalRuns, visitanteStats.hits, visitanteStats.errors],
+            [nombreEquipoLocal, ...[...Array(maxInnings)].map((_, i) => localStats.runsPerInning[i + 1] ?? 0), localStats.totalRuns, localStats.hits, localStats.errors]
+        ]
+    }) + "\n\n";
+
+    // Batting Stats Section
+    const battingHeaders = ["Jugador", "Pos", "AB", "CA", "1B", "2B", "3B", "HR", "CI", "BB", "K"];
+    
+    // Visitante Batting
+    csvString += `"${nombreEquipoVisitante} - Bateo"\n`;
+    const visitorBattingData = lineupVisitante.map(p => [
+        p.nombreJugador, p.posicion || '--', p.stats.atBats, p.stats.runs, p.stats.singles || 0, p.stats.doubles || 0, p.stats.triples || 0, p.stats.homeRuns || 0, p.stats.rbi, p.stats.walks, p.stats.strikeouts
+    ]);
+    const visitorTotals = lineupVisitante.reduce((acc, p) => ({
+        ab: acc.ab + p.stats.atBats, r: acc.r + p.stats.runs, h1b: acc.h1b + (p.stats.singles || 0), h2b: acc.h2b + (p.stats.doubles || 0), h3b: acc.h3b + (p.stats.triples || 0), hr: acc.hr + (p.stats.homeRuns || 0), rbi: acc.rbi + p.stats.rbi, bb: acc.bb + p.stats.walks, k: acc.k + p.stats.strikeouts
+    }), { ab: 0, r: 0, h1b: 0, h2b: 0, h3b: 0, hr: 0, rbi: 0, bb: 0, k: 0 });
+    visitorBattingData.push(["TOTALES", "", visitorTotals.ab, visitorTotals.r, visitorTotals.h1b, visitorTotals.h2b, visitorTotals.h3b, visitorTotals.hr, visitorTotals.rbi, visitorTotals.bb, visitorTotals.k]);
+    csvString += Papa.unparse({ fields: battingHeaders, data: visitorBattingData }) + "\n\n";
+
+    // Local Batting
+    csvString += `"${nombreEquipoLocal} - Bateo"\n`;
+    const localBattingData = lineupLocal.map(p => [
+        p.nombreJugador, p.posicion || '--', p.stats.atBats, p.stats.runs, p.stats.singles || 0, p.stats.doubles || 0, p.stats.triples || 0, p.stats.homeRuns || 0, p.stats.rbi, p.stats.walks, p.stats.strikeouts
+    ]);
+    const localTotals = lineupLocal.reduce((acc, p) => ({
+        ab: acc.ab + p.stats.atBats, r: acc.r + p.stats.runs, h1b: acc.h1b + (p.stats.singles || 0), h2b: acc.h2b + (p.stats.doubles || 0), h3b: acc.h3b + (p.stats.triples || 0), hr: acc.hr + (p.stats.homeRuns || 0), rbi: acc.rbi + p.stats.rbi, bb: acc.bb + p.stats.walks, k: acc.k + p.stats.strikeouts
+    }), { ab: 0, r: 0, h1b: 0, h2b: 0, h3b: 0, hr: 0, rbi: 0, bb: 0, k: 0 });
+    localBattingData.push(["TOTALES", "", localTotals.ab, localTotals.r, localTotals.h1b, localTotals.h2b, localTotals.h3b, localTotals.hr, localTotals.rbi, localTotals.bb, localTotals.k]);
+    csvString += Papa.unparse({ fields: battingHeaders, data: localBattingData });
+
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    const filename = `box_score_${nombreEquipoVisitante}_vs_${nombreEquipoLocal}_${fecha}.csv`;
+    link.setAttribute("href", url);
+    link.setAttribute("download", filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    alert('Box Score exportado como CSV.');
+  };
+
 
   const gameLogColumns: TableColumn<RegistroJuego>[] = [
     { header: 'Inn.', accessor: (item) => `${item.halfInning === 'Top' ? 'T' : 'B'}${item.inning}`, className: "w-12 text-xs"},
@@ -2347,15 +2406,73 @@ export const PartidosPage: React.FC = () => {
         </div>
       </div>
       <div className="bg-white p-4 shadow rounded-lg mt-6 flex flex-wrap gap-2 justify-center"><Button onClick={handleSaveGame} variant="primary">Guardar Progreso</Button><Button onClick={handleExportCurrentPartidoCSV} variant="secondary" disabled={!currentPartido}>Exportar Partido CSV</Button><Button onClick={requestResetPartido} variant="warning" disabled={gamePhase==='ended'}>Reiniciar Partido</Button><Button onClick={requestEndGame} variant="danger">Terminar Partido</Button><Button onClick={()=>navigate('/historial')} variant="secondary">Ver Historial</Button></div>
-      <div className="bg-white p-4 shadow rounded-lg mt-6"><div className="flex justify-between items-center mb-2"><h2 className="text-xl font-semibold">Registro Detallado del Juego</h2><Button onClick={()=>setIsGameLogExpanded(!isGameLogExpanded)} variant="light" size="sm">{isGameLogExpanded?'Contraer':'Expandir'} Lista</Button></div><p className="text-xs text-red-600 mb-2 bg-red-50 p-2 rounded">Nota: Editar o eliminar jugadas pasadas del registro NO recalculará automáticamente las estadísticas del juego ni el estado de las bases posteriores. Estos cambios son solo para corregir el registro. Las jugadas anotadas a través de la opción "Anotar" en la lista de jugadores afectarán el estado del juego (outs, bases, etc.).</Button><div className={`overflow-y-auto transition-all duration-300 ease-in-out ${isGameLogExpanded?'max-h-none':'max-h-[30rem]'}`}><Table columns={gameLogColumns} data={[...(currentPartido?.registrosJuego||[])].reverse()}/></div></div>
+      <div className="bg-white p-4 shadow rounded-lg mt-6">
+        <div className="flex justify-between items-center mb-2">
+            <h2 className="text-xl font-semibold">Registro Detallado del Juego</h2>
+            <Button onClick={()=>setIsGameLogExpanded(!isGameLogExpanded)} variant="light" size="sm">{isGameLogExpanded?'Contraer':'Expandir'} Lista</Button>
+        </div>
+        <p className="text-xs text-red-600 mb-2 bg-red-50 p-2 rounded">
+            Nota: Editar o eliminar jugadas pasadas del registro NO recalculará automáticamente las estadísticas del juego ni el estado de las bases posteriores. Estos cambios son solo para corregir el registro. Las jugadas anotadas a través de la opción "Anotar" en la lista de jugadores afectarán el estado del juego (outs, bases, etc.).
+        </p>
+        <div className={`overflow-y-auto transition-all duration-300 ease-in-out ${isGameLogExpanded?'max-h-none':'max-h-[30rem]'}`}>
+            <Table columns={gameLogColumns} data={[...(currentPartido?.registrosJuego||[])].reverse()}/>
+        </div>
+      </div>
 
       {/* Box Score Modal */}
-      <Modal isOpen={isBoxScoreModalOpen} onClose={()=>setIsBoxScoreModalOpen(false)} title="Box Score" size="xl">{currentPartido&&(<div className="text-xs overflow-y-auto max-h-[75vh]"><h3 className="text-lg font-semibold mb-2 text-center">{currentPartido.nombreEquipoVisitante} vs {currentPartido.nombreEquipoLocal}</h3><div className="overflow-x-auto mb-4"><table className="min-w-full table-auto border-collapse border border-gray-300"><thead><tr className="bg-gray-100"><th className="p-1 border border-gray-300">Equipo</th>{[...Array(maxInnings)].map((_,i)=><th key={`ls-inn-${i}`} className="p-1 border border-gray-300 w-6 text-center">{i+1}</th>)}<th className="p-1 border border-gray-300 w-8 text-center">C</th><th className="p-1 border border-gray-300 w-8 text-center">H</th><th className="p-1 border border-gray-300 w-8 text-center">E</th></tr></thead><tbody><tr><td className="p-1 border border-gray-300 font-medium">{currentPartido.nombreEquipoVisitante}</td>{[...Array(maxInnings)].map((_,i)=><td key={`ls-v-inn-${i}`} className="p-1 border border-gray-300 text-center">{currentPartido.visitanteStats.runsPerInning[i+1]??0}</td>)}<td className="p-1 border border-gray-300 text-center font-bold">{currentPartido.visitanteStats.totalRuns}</td><td className="p-1 border border-gray-300 text-center font-bold">{currentPartido.visitanteStats.hits}</td><td className="p-1 border border-gray-300 text-center font-bold">{currentPartido.visitanteStats.errors}</td></tr><tr><td className="p-1 border border-gray-300 font-medium">{currentPartido.nombreEquipoLocal}</td>{[...Array(maxInnings)].map((_,i)=><td key={`ls-l-inn-${i}`} className="p-1 border border-gray-300 text-center">{currentPartido.localStats.runsPerInning[i+1]??0}</td>)}<td className="p-1 border border-gray-300 text-center font-bold">{currentPartido.localStats.totalRuns}</td><td className="p-1 border border-gray-300 text-center font-bold">{currentPartido.localStats.hits}</td><td className="p-1 border border-gray-300 text-center font-bold">{currentPartido.localStats.errors}</td></tr></tbody></table></div>
+      <Modal isOpen={isBoxScoreModalOpen} onClose={()=>setIsBoxScoreModalOpen(false)} title="Box Score" size="xl">
+        {currentPartido && (
+          <div className="text-xs overflow-y-auto max-h-[75vh]">
+            <h3 className="text-lg font-semibold mb-2 text-center">{currentPartido.nombreEquipoVisitante} vs {currentPartido.nombreEquipoLocal}</h3>
+            <div className="overflow-x-auto mb-4">
+              <table className="min-w-full table-auto border-collapse border border-gray-300">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="p-1 border border-gray-300">Equipo</th>
+                    {[...Array(maxInnings)].map((_,i)=><th key={`ls-inn-${i}`} className="p-1 border border-gray-300 w-6 text-center">{i+1}</th>)}
+                    <th className="p-1 border border-gray-300 w-8 text-center">C</th>
+                    <th className="p-1 border border-gray-300 w-8 text-center">H</th>
+                    <th className="p-1 border border-gray-300 w-8 text-center">E</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="p-1 border border-gray-300 font-medium">{currentPartido.nombreEquipoVisitante}</td>
+                    {[...Array(maxInnings)].map((_,i)=><td key={`ls-v-inn-${i}`} className="p-1 border border-gray-300 text-center">{currentPartido.visitanteStats.runsPerInning[i+1]??0}</td>)}
+                    <td className="p-1 border border-gray-300 text-center font-bold">{currentPartido.visitanteStats.totalRuns}</td>
+                    <td className="p-1 border border-gray-300 text-center font-bold">{currentPartido.visitanteStats.hits}</td>
+                    <td className="p-1 border border-gray-300 text-center font-bold">{currentPartido.visitanteStats.errors}</td>
+                  </tr>
+                  <tr>
+                    <td className="p-1 border border-gray-300 font-medium">{currentPartido.nombreEquipoLocal}</td>
+                    {[...Array(maxInnings)].map((_,i)=><td key={`ls-l-inn-${i}`} className="p-1 border border-gray-300 text-center">{currentPartido.localStats.runsPerInning[i+1]??0}</td>)}
+                    <td className="p-1 border border-gray-300 text-center font-bold">{currentPartido.localStats.totalRuns}</td>
+                    <td className="p-1 border border-gray-300 text-center font-bold">{currentPartido.localStats.hits}</td>
+                    <td className="p-1 border border-gray-300 text-center font-bold">{currentPartido.localStats.errors}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
                 {['visitante','local'].map(teamType=>{const lineup=teamType==='visitante'?currentPartido.lineupVisitante:currentPartido.lineupLocal; const teamName=teamType==='visitante'?currentPartido.nombreEquipoVisitante:currentPartido.nombreEquipoLocal; const totals=lineup.reduce((acc,p)=>({ab:acc.ab+p.stats.atBats,r:acc.r+p.stats.runs,h1b:acc.h1b+(p.stats.singles||0),h2b:acc.h2b+(p.stats.doubles||0),h3b:acc.h3b+(p.stats.triples||0),hr:acc.hr+(p.stats.homeRuns||0),rbi:acc.rbi+p.stats.rbi,bb:acc.bb+p.stats.walks,k:acc.k+p.stats.strikeouts}),{ab:0,r:0,h1b:0,h2b:0,h3b:0,hr:0,rbi:0,bb:0,k:0}); return (<div key={teamType} className="mb-4"><h4 className="text-md font-semibold mb-1">{teamName} - Bateo</h4><div className="overflow-x-auto"><table className="min-w-full table-auto border-collapse border border-gray-300"><thead><tr className="bg-gray-50"><th className="p-1 border border-gray-300">Jugador</th><th className="p-1 border border-gray-300">Pos</th><th className="p-1 border border-gray-300">AB</th><th className="p-1 border border-gray-300">CA</th><th className="p-1 border border-gray-300">1B</th><th className="p-1 border border-gray-300">2B</th><th className="p-1 border border-gray-300">3B</th><th className="p-1 border border-gray-300">HR</th><th className="p-1 border border-gray-300">CI</th><th className="p-1 border border-gray-300">BB</th><th className="p-1 border border-gray-300">K</th></tr></thead><tbody>
                   {lineup.map(p=>(<tr key={p.id} className={p.posicion==='BE'?'opacity-60':''}><td className="p-1 border border-gray-300">{p.nombreJugador}</td><td className="p-1 border border-gray-300">{p.posicion||'--'}</td><td className="p-1 border border-gray-300 text-center">{p.stats.atBats}</td><td className="p-1 border border-gray-300 text-center">{p.stats.runs}</td><td className="p-1 border border-gray-300 text-center">{p.stats.singles||0}</td><td className="p-1 border border-gray-300 text-center">{p.stats.doubles||0}</td><td className="p-1 border border-gray-300 text-center">{p.stats.triples||0}</td><td className="p-1 border border-gray-300 text-center">{p.stats.homeRuns||0}</td><td className="p-1 border border-gray-300 text-center">{p.stats.rbi}</td><td className="p-1 border border-gray-300 text-center">{p.stats.walks}</td><td className="p-1 border border-gray-300 text-center">{p.stats.strikeouts}</td></tr>))}
                 <tr className="font-bold bg-gray-50"><td className="p-1 border border-gray-300">TOTALES</td><td className="p-1 border border-gray-300"></td><td className="p-1 border border-gray-300 text-center">{totals.ab}</td><td className="p-1 border border-gray-300 text-center">{totals.r}</td><td className="p-1 border border-gray-300 text-center">{totals.h1b}</td><td className="p-1 border border-gray-300 text-center">{totals.h2b}</td><td className="p-1 border border-gray-300 text-center">{totals.h3b}</td><td className="p-1 border border-gray-300 text-center">{totals.hr}</td><td className="p-1 border border-gray-300 text-center">{totals.rbi}</td><td className="p-1 border border-gray-300 text-center">{totals.bb}</td><td className="p-1 border border-gray-300 text-center">{totals.k}</td></tr></tbody></table></div></div>);
               })}
-                <div className="flex justify-end pt-2"><Button onClick={()=>setIsBoxScoreModalOpen(false)}>Volver al Partido</Button></div></div>)}</Modal>
+            <div className="flex justify-between items-center pt-2">
+                <Button 
+                    onClick={handleExportBoxScoreCSV} 
+                    variant="success" 
+                    size="sm"
+                    className="flex items-center"
+                    disabled={!currentPartido}
+                >
+                    <MdOutlineFileDownload className="mr-1.5 h-4 w-4"/>
+                    Exportar Box Score (CSV)
+                </Button>
+                <Button onClick={()=>setIsBoxScoreModalOpen(false)} size="sm">Volver al Partido</Button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* Play Modal */}
       <Modal isOpen={isPlayModalOpen} onClose={()=>setIsPlayModalOpen(false)} title={`Anotar Jugada para ${currentPlayerForPlay?.nombreJugador||'Jugador'} ${isFreeEditModeForModal?'(Modo Edición Libre)':''}`} size="xl"><div className="space-y-3 max-h-[70vh] overflow-y-auto">{playCategoryOrder.map(category=>(groupedPlays[category]&&groupedPlays[category].length>0&&(<div key={category}><h3 className="text-lg font-semibold my-2 text-gray-700 border-b pb-1">{category}</h3><div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">{groupedPlays[category].map(jugada=>(<Button key={jugada.jugada} variant={playCategoryColors[jugada.category]||"secondary"} onClick={()=>handlePlaySelected(jugada)} className="w-full text-center text-sm break-words whitespace-normal h-auto min-h-[40px] flex items-center justify-center" title={jugada.descripcion}>{jugada.descripcion} ({jugada.jugada})</Button>))}</div></div>)))}<div className="flex justify-end pt-4"><Button variant="light" onClick={()=>setIsPlayModalOpen(false)}>Cancelar</Button></div></div></Modal>
