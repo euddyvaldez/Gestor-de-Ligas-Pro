@@ -1,2 +1,14 @@
-# Gestor-de-Ligas-Pro
-🏆 Gestor de Ligas PRO te permite organizar torneos de béisbol fácilmente desde tu navegador. Administra equipos, partidos y estadísticas. Ideal para ligas pequeñas, con una interfaz moderna y uso 100% local. ¡Fácil, rápido y listo para jugar!
+# Run and deploy your AI Studio app
+
+This contains everything you need to run your app locally.
+
+## Run Locally
+
+**Prerequisites:**  Node.js
+
+
+1. Install dependencies:
+   `npm install`
+2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+3. Run the app:
+   `npm run dev`

@@ -1,0 +1,78 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gestor de Ligas</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root {
+      --color-primary: #007bff; /* Azul vibrante */
+      --color-primary-dark: #0056b3;
+      --color-secondary: #6c757d; /* Gris neutro */
+      --color-accent: #17a2b8; /* Turquesa */
+      --color-success: #28a745; /* Verde */
+      --color-danger: #dc3545; /* Rojo */
+      --color-warning: #ffc107; /* Amarillo */
+      --color-info: #17a2b8; /* Turquesa (igual que accent) */
+      --color-light: #f8f9fa; /* Gris claro */
+      --color-dark: #343a40; /* Gris oscuro */
+      --color-text: #212529; /* Texto principal */
+      --color-text-muted: #6c757d; /* Texto secundario */
+      --color-background: #ffffff; /* Fondo principal */
+      --color-background-alt: #f1f3f5; /* Fondo alternativo */
+      --color-border: #dee2e6; /* Bordes */
+
+      --font-family-sans-serif: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+      --font-family-monospace: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+    body {
+      font-family: var(--font-family-sans-serif);
+      color: var(--color-text);
+      background-color: var(--color-background-alt);
+    }
+    .btn-primary {
+      background-color: var(--color-primary);
+      color: white;
+    }
+    .btn-primary:hover {
+      background-color: var(--color-primary-dark);
+    }
+    .nav-active {
+      background-color: var(--color-primary);
+      color: white !important;
+    }
+    .table th, .table td {
+      border-color: var(--color-border);
+    }
+    /* Hamburger Menu Styles */
+    .hamburger-icon span {
+      display: block;
+      width: 25px;
+      height: 3px;
+      background-color: var(--color-primary);
+      margin: 5px 0;
+      transition: all 0.3s ease-in-out;
+    }
+  </style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.1.0",
+    "react/": "https://esm.sh/react@^19.1.0/",
+    "react-dom/": "https://esm.sh/react-dom@^19.1.0/",
+    "react-router-dom": "https://esm.sh/react-router-dom@^7.6.2",
+    "papaparse": "https://esm.sh/papaparse@^5.5.3",
+    "react-icons/": "https://esm.sh/react-icons@^5.5.0/"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+{
+  "name": "Gestor de Ligas Pro",
+  "description": "A web application to manage baseball league games, players, plays, formats, and history. Allows for game setup, live scoring, and viewing game history.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}
