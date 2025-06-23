@@ -3,7 +3,8 @@ import React, { useState, useEffect } from 'react';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 import Select from '../ui/Select';
-import { RunnerAdvancementReason, PlayerOnBase, LineupPlayer } from '../../types';
+import { RunnerAdvancementReason, PlayerOnBase, LineupPlayer, Jugada } from '../../types'; // Added Jugada
+import { defaultJugadas } from '../../constants'; // Added defaultJugadas
 
 interface RunnerAdvancementReasonModalProps {
   isOpen: boolean;
@@ -12,6 +13,7 @@ interface RunnerAdvancementReasonModalProps {
   runner: PlayerOnBase;
   defensiveTeamLineup: LineupPlayer[];
   defensiveTeamName: string;
+  isScoringAttempt?: boolean; // Optional: To tailor text if scoring from 3rd
 }
 
 const RunnerAdvancementReasonModal: React.FC<RunnerAdvancementReasonModalProps> = ({
@@ -21,6 +23,7 @@ const RunnerAdvancementReasonModal: React.FC<RunnerAdvancementReasonModalProps> 
   runner,
   defensiveTeamLineup,
   defensiveTeamName,
+  isScoringAttempt = false,
 }) => {
   const [reason, setReason] = useState<RunnerAdvancementReason | string>(RunnerAdvancementReason.STOLEN_BASE);
   const [errorPlayerId, setErrorPlayerId] = useState<string | null>(null); // For 'EA'
@@ -42,11 +45,14 @@ const RunnerAdvancementReasonModal: React.FC<RunnerAdvancementReasonModalProps> 
   };
 
   const reasonOptions = [
-    { value: RunnerAdvancementReason.STOLEN_BASE, label: 'Base Robada (SB)' },
+    { value: RunnerAdvancementReason.STOLEN_BASE, label: `Base Robada ${isScoringAttempt ? ' (Robo de Home)' : ''} (SB)` },
     { value: RunnerAdvancementReason.WILD_PITCH, label: 'Wild Pitch (WP)' },
     { value: RunnerAdvancementReason.PASSED_BALL, label: 'Passed Ball (PB)' },
     { value: RunnerAdvancementReason.DEFENSIVE_INDIFFERENCE, label: 'Indiferencia Defensiva (DI)' },
-    { value: RunnerAdvancementReason.ERROR_ADVANCE, label: 'Avance por Error Defensivo (EA)' },
+    { value: RunnerAdvancementReason.ERROR_ADVANCE, label: `Avance por Error Defensivo (AE)${isScoringAttempt ? ' que permite anotar' : ''}` },
+    // Add OB and BK from constants if available
+    ...(defaultJugadas.find(j => j.jugada === 'OB') ? [{ value: 'OB', label: 'Obstrucción (OB)' }] : []),
+    ...(defaultJugadas.find(j => j.jugada === 'BK') ? [{ value: 'BK', label: 'Balk (BK)' }] : []),
     { value: RunnerAdvancementReason.OTHER, label: 'Otro Motivo' },
   ];
 
@@ -60,16 +66,20 @@ const RunnerAdvancementReasonModal: React.FC<RunnerAdvancementReasonModalProps> 
       })),
   ];
 
+  const modalTitle = isScoringAttempt 
+    ? `Causa de Anotación para ${runner.nombreJugador}`
+    : `Motivo del Avance para ${runner.nombreJugador}`;
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={`Motivo del Avance para ${runner.nombreJugador}`}
+      title={modalTitle}
       size="md"
     >
       <div className="space-y-4">
         <Select
-          label="Seleccionar Motivo del Avance:"
+          label={`Seleccionar Causa de ${isScoringAttempt ? 'Anotación:' : 'Avance:'}`}
           options={reasonOptions}
           value={reason}
           onChange={(e) => setReason(e.target.value as RunnerAdvancementReason | string)}

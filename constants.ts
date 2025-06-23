@@ -29,7 +29,6 @@ export const defaultJugadas: Omit<Jugada, 'codigo'>[] = [
   { jugada: 'HR', descripcion: 'Home Run', category: PlayCategory.HIT, isDefault: true, isActive: true },
   // Outs
   { jugada: 'K', descripcion: 'Ponche', category: PlayCategory.OUT, isDefault: true, isActive: true },
-  // { jugada: 'KS', descripcion: 'Strikeout Cantado', category: PlayCategory.OUT, isDefault: true, isActive: true }, // Removed as per request
   { jugada: 'GO', descripcion: 'Ground Out', category: PlayCategory.OUT, isDefault: true, isActive: true },
   { jugada: 'FO', descripcion: 'Fly Out', category: PlayCategory.OUT, isDefault: true, isActive: true },
   { jugada: 'LO', descripcion: 'Line Out', category: PlayCategory.OUT, isDefault: true, isActive: true },
@@ -50,10 +49,17 @@ export const defaultJugadas: Omit<Jugada, 'codigo'>[] = [
   { jugada: 'PB', descripcion: 'Passed Ball', category: PlayCategory.ADVANCEMENT, isDefault: true, isActive: true },
   { jugada: 'ID', descripcion: 'Indiferencia Defensiva', category: PlayCategory.ADVANCEMENT, isDefault: true, isActive: true },
   { jugada: 'AE', descripcion: 'Avance por Error defensivo', category: PlayCategory.ADVANCEMENT, isDefault: true, isActive: true },
+  { jugada: 'OB', descripcion: 'Obstrucción', category: PlayCategory.ADVANCEMENT, isDefault: false, isActive: true },
+  { jugada: 'BK', descripcion: 'Balk', category: PlayCategory.ADVANCEMENT, isDefault: false, isActive: true },
   // Special & Scoring Related
   { jugada: 'R', descripcion: 'Carrera Anotada', category: PlayCategory.SPECIAL, isDefault: true, isActive: true },
   { jugada: 'RBI', descripcion: 'Carrera Impulsada', category: PlayCategory.SPECIAL, isDefault: true, isActive: true },
   { jugada: 'ED', descripcion: 'Error Defensivo', category: PlayCategory.SPECIAL, isDefault: true, isActive: true },
+  // System/Manual Plays (not directly user-selectable in general play modal, but used by system for specific logs)
+  { jugada: 'OUT_RUNNER_BASE', descripcion: 'Out Corredor en Base', category: PlayCategory.OUT, isDefault: false, isActive: true },
+  { jugada: 'ADV_OTRO', descripcion: 'Avance Manual (Otro Motivo)', category: PlayCategory.ADVANCEMENT, isDefault: false, isActive: true },
+  { jugada: 'OUT_ROH', descripcion: 'Out Corredor en Hit', category: PlayCategory.OUT, isDefault: false, isActive: true },
+  { jugada: 'OUT_ROS', descripcion: 'Out Corredor en Sacrificio', category: PlayCategory.OUT, isDefault: false, isActive: true },
 ];
 
 export const defaultFormatos: Omit<Formato, 'codigo'>[] = [
