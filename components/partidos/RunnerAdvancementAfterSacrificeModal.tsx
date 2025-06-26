@@ -26,7 +26,7 @@ const RunnerAdvancementAfterSacrificeModal: React.FC<RunnerAdvancementAfterSacri
   batter,
   sacrificeType,
   runnersOnBase,
-  initialAdvancements, // May not be needed if we always calculate from scratch
+  initialAdvancements, 
   initialOuts,
   onConfirm,
 }) => {
@@ -36,15 +36,11 @@ const RunnerAdvancementAfterSacrificeModal: React.FC<RunnerAdvancementAfterSacri
     if (isOpen) {
       const newAdvancementsState: { [key: string]: number } = {};
       runnersOnBase.forEach(runner => {
-        // Prefill logic for sacrifice
-        if (sacrificeType === 'SF' && runner.currentBase === 3 && initialOuts < 2) {
-          newAdvancementsState[runner.lineupPlayerId] = 4; // HOME
-        } else {
-          // Default: advance one base if possible, otherwise hold. User can override.
-          // Consider forced advances for SH (e.g., runner on 1B, SH means they must go to 2B if not out)
-          // For now, simple prefill:
-          newAdvancementsState[runner.lineupPlayerId] = Math.min(4, runner.currentBase + 1);
-        }
+        // For SF, the runner from 3B (if conditions met) is assumed to score and might not even be in `runnersOnBase` prop here.
+        // This modal should primarily handle runners on 1B/2B for SF, or all runners for SH.
+        // Default prefill: advance one base if possible, or hold. User can override.
+        // More sophisticated prefill might consider forced advances on SH.
+        newAdvancementsState[runner.lineupPlayerId] = Math.min(4, runner.currentBase + 1); 
       });
       setAdvancements(newAdvancementsState);
     }
@@ -55,17 +51,17 @@ const RunnerAdvancementAfterSacrificeModal: React.FC<RunnerAdvancementAfterSacri
   };
 
   const handleConfirmClick = () => {
-    for (const runner of runnersOnBase) {
-      if (advancements[runner.lineupPlayerId] === undefined && runnersOnBase.length > 0) {
-        alert(`Por favor, seleccione una opción para ${runner.nombreJugador}.`);
+    // Check if all runners have a decision if there are runners to decide for.
+    if (runnersOnBase.length > 0 && !runnersOnBase.every(runner => advancements[runner.lineupPlayerId] !== undefined)) {
+        alert(`Por favor, seleccione una opción para cada corredor.`);
         return;
-      }
     }
     onConfirm(advancements, batter, sacrificeType, initialOuts);
     onClose();
   };
 
   const getBaseLabel = (baseNum: number): string => {
+    if (baseNum === 0) return 'OUT';
     if (baseNum === 1) return '1B';
     if (baseNum === 2) return '2B';
     if (baseNum === 3) return '3B';
@@ -83,50 +79,56 @@ const RunnerAdvancementAfterSacrificeModal: React.FC<RunnerAdvancementAfterSacri
       <div className="space-y-4">
         <p className="text-sm text-gray-600">
           El bateador ({batter.nombreJugador}) es OUT por {sacrificeType}.
-          Seleccione la base a la que avanza cada corredor o si fue puesto OUT.
+          {sacrificeType === 'SF' && runnersOnBase.some(r => r.currentBase === 3) && initialOuts < 2 ? 
+            ' El corredor de 3B anota automáticamente. ' : ''}
+          Seleccione la base a la que avanza cada corredor adicional o si fue puesto OUT.
         </p>
-        {runnersOnBase.length === 0 && <p className="text-sm text-gray-500 text-center py-2">No había corredores en base.</p>}
+        {runnersOnBase.length === 0 && <p className="text-sm text-gray-500 text-center py-2">No había otros corredores en base para avanzar.</p>}
+        
         {runnersOnBase.map(runner => {
-          const currentRunnerAdvancement = advancements[runner.lineupPlayerId];
-          // Determine valid options: can advance any number of bases or be out.
-          // For SF, if runner on 3B scores, it's an RBI.
-          // For SH, usually advances one base.
-          const validOptions: number[] = [0, 1, 2, 3, 4]; // 0=OUT, 1-4 for bases
+          // Runner from 3B on SF scores automatically, should not be interactive here.
+          if (sacrificeType === 'SF' && runner.currentBase === 3 && initialOuts < 2) {
+            return (
+              <div key={runner.lineupPlayerId} className="p-3 border rounded-md shadow-sm bg-green-50">
+                <p className="font-medium text-green-700">
+                  {runner.nombreJugador} (en 3B originalmente) - Anota automáticamente por Fly de Sacrificio.
+                </p>
+              </div>
+            );
+          }
 
+          const currentRunnerAdvancement = advancements[runner.lineupPlayerId];
+          
           return (
             <div key={runner.lineupPlayerId} className="p-3 border rounded-md shadow-sm bg-gray-50">
               <p className="font-medium text-gray-800">
                 {runner.nombreJugador} (en {getBaseLabel(runner.currentBase)} originalmente)
               </p>
               <div className="flex space-x-2 mt-2">
-                {[1, 2, 3, 4].map(baseNum => {
-                  const isEnabled = validOptions.includes(baseNum);
-                  // Runner cannot advance to a base lower than their current base, unless out.
-                  const canAdvanceToBase = baseNum >= runner.currentBase;
+                {[1, 2, 3, 4, 0].map(baseNum => { // 0 for OUT
+                  let isEnabled = true;
+                  let title = `Mover a ${getBaseLabel(baseNum)}`;
+
+                  if (baseNum !== 0 && baseNum < runner.currentBase) { // Cannot retreat unless OUT
+                    isEnabled = false;
+                    title = `No se puede retroceder a ${getBaseLabel(baseNum)}.`;
+                  }
+                  // Add any other specific disabling logic if needed (e.g., cannot skip bases without reason)
 
                   return (
                     <Button
                       key={baseNum}
                       onClick={() => handleAdvancementChange(runner.lineupPlayerId, baseNum)}
-                      variant={currentRunnerAdvancement === baseNum ? 'primary' : 'light'}
+                      variant={currentRunnerAdvancement === baseNum ? (baseNum === 0 ? 'danger' : 'primary') : 'light'}
                       size="sm"
-                      className={`flex-1 ${(!isEnabled || !canAdvanceToBase) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      disabled={!isEnabled || !canAdvanceToBase}
-                      title={!isEnabled || !canAdvanceToBase ? `Avance a ${getBaseLabel(baseNum)} no permitido.` : `Mover a ${getBaseLabel(baseNum)}`}
+                      className={`flex-1 ${!isEnabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      disabled={!isEnabled}
+                      title={title}
                     >
                       {getBaseLabel(baseNum)}
                     </Button>
                   );
                 })}
-                <Button
-                  onClick={() => handleAdvancementChange(runner.lineupPlayerId, 0)} // 0 for OUT
-                  variant={currentRunnerAdvancement === 0 ? 'danger' : 'light'}
-                  size="sm"
-                  className="flex-1"
-                  title="Marcar Corredor como OUT"
-                >
-                  OUT
-                </Button>
               </div>
             </div>
           );

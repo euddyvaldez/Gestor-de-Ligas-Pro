@@ -54,7 +54,7 @@ export const defaultJugadas: Omit<Jugada, 'codigo'>[] = [
   // Special & Scoring Related
   { jugada: 'R', descripcion: 'Carrera Anotada', category: PlayCategory.SPECIAL, isDefault: true, isActive: true },
   { jugada: 'RBI', descripcion: 'Carrera Impulsada', category: PlayCategory.SPECIAL, isDefault: true, isActive: true },
-  { jugada: 'ED', descripcion: 'Error Defensivo', category: PlayCategory.SPECIAL, isDefault: true, isActive: true },
+  // { jugada: 'ED', descripcion: 'Error Defensivo', category: PlayCategory.SPECIAL, isDefault: true, isActive: true }, // REMOVED
   // System/Manual Plays (not directly user-selectable in general play modal, but used by system for specific logs)
   { jugada: 'OUT_RUNNER_BASE', descripcion: 'Out Corredor en Base', category: PlayCategory.OUT, isDefault: false, isActive: true },
   { jugada: 'ADV_OTRO', descripcion: 'Avance Manual (Otro Motivo)', category: PlayCategory.ADVANCEMENT, isDefault: false, isActive: true },

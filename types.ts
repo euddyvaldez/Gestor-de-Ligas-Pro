@@ -50,6 +50,7 @@ export interface PartidoConfig {
 
 export interface BatterStats {
   atBats: number;
+  plateAppearances: number; // Nueva propiedad para Apariciones al Plato (AP)
   hits: number; // Total hits
   runs: number;
   rbi: number;
@@ -240,9 +241,9 @@ export interface AssignRbiModalState {
   baseIndexOfScorer?: 0 | 1 | 2; // Store the original base index of the scorer
 }
 
-// For RunnerAdvancementAfterHitModal
+// For RunnerAdvancementAfterHitModal and RunnerAdvancementAfterErrorModal
 export interface RunnerAdvancementInfo extends PlayerOnBase {
-  currentBase: 1 | 2 | 3; // The base the runner was on AT THE TIME OF THE HIT
+  currentBase: 1 | 2 | 3; // The base the runner was on AT THE TIME OF THE HIT/ERROR
 }
 
 export interface RunnerAdvancementAfterHitModalState {
@@ -264,4 +265,38 @@ export interface RunnerAdvancementAfterSacrificeModalState {
   // Store chosen new base for each runner (1-3 for bases, 4 for HOME, 0 for OUT)
   advancements: { [lineupPlayerId: string]: number };
   initialOuts: number; // Outs before this sacrifice play began
+}
+
+// For RunnerAdvancementAfterErrorModal
+export interface RunnerAdvancementAfterErrorModalState {
+  isOpen: boolean;
+  batterWhoReachedOnError: LineupPlayer | null; // The batter involved in the error play
+  batterFinalDestBaseOnError: 0 | 1 | 2 | 3; // Base batter reached (0=1B, 1=2B, etc., 3=HOME)
+  runnersOnBaseAtTimeOfError: RunnerAdvancementInfo[];
+  fielderWhoCommittedError: number | null; // Jugador.codigo of the fielder, or null for team error
+  // Store chosen new base for each runner (1-3 for bases, 4 for HOME, 0 for OUT)
+  advancements: { [lineupPlayerId: string]: number };
+}
+
+// For FielderChoiceOutcomeModal
+export interface FielderChoiceModalState {
+  isOpen: boolean;
+  batter: LineupPlayer | null;
+  runnersOnBase: RunnerAdvancementInfo[]; // Runners on base at the time of the FC
+  initialOuts: number; // Outs before this FC play began
+  // Propagated from PartidosPage to FielderChoiceOutcomeModal
+  // These will be managed internally by the modal and then passed back up
+}
+
+export interface FielderChoiceResult {
+  batterAdvancement: number; // Batter's final destination (0=OUT, 1=1B, 2=2B, 3=3B, 4=HOME)
+  runnerAdvancements: { [lineupPlayerId: string]: number }; // RunnerId -> final destination (0-4)
+  primaryOutPlayerId: string | null; // ID of the player selected as out from the dropdown (can be batter or a runner)
+}
+
+
+// For PartidosPage.tsx to pass to ErrorAdvancementModal
+export interface ErrorModalContext {
+    batterLineupPlayer: LineupPlayer;
+    initialBasesBeforePlay: [PlayerOnBase | null, PlayerOnBase | null, PlayerOnBase | null];
 }

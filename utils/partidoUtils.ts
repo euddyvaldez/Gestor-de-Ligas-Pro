@@ -3,6 +3,7 @@ import { LineupPlayer, BatterStats, GameStatus, PartidoData, AppGlobalConfig, Fo
 
 export const createEmptyBatterStats = (): BatterStats => ({ 
   atBats: 0, 
+  plateAppearances: 0, // Inicializar AP
   hits: 0, 
   runs: 0, 
   rbi: 0, 
