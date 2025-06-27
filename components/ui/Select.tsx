@@ -1,4 +1,3 @@
-
 import React from 'react';
 
 interface SelectOption {
@@ -15,7 +14,7 @@ interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
 }
 
 const Select: React.FC<SelectProps> = ({ label, id, options, error, className = '', placeholder, ...props }) => {
-  const baseStyle = 'block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md shadow-sm bg-white text-gray-900';
+  const baseStyle = 'block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md shadow-sm bg-gray-200 focus:bg-white text-gray-900';
   const errorStyle = 'border-red-500 focus:ring-red-500 focus:border-red-500';
   
   return (
