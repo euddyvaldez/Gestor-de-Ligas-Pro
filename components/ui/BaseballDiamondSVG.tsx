@@ -15,18 +15,20 @@ export const BaseballDiamondSVG: React.FC<BaseballDiamondSVGProps> = ({
     onBaseClick,
     disabled = false
 }) => {
-  const occupiedBaseColor = "#ffc107"; // Corresponds to --color-warning
-  const emptyBaseColor = "white";
-  const baseStrokeColor = "black";
+  const occupiedBaseColor = "var(--color-warning)";
+  const emptyBaseColor = "var(--color-base-empty)";
+  const baseStrokeColor = "var(--color-base-stroke)";
+  const baseLineColor = "var(--color-base-line)";
   const baseStrokeWidth = "3";
   const baseLineWidth = "12";
   const innerBaseLineWidth = "6";
-  const dirtColor = "#D2B48C";
+  const dirtColor = "var(--color-dirt)";
+  const infieldGrassColor = "var(--color-infield-grass)";
 
   // Label specific styles
-  const labelBackgroundColor = "#E9ECEF"; // Light gray
-  const labelTextColor = "#212529";     // Dark text
-  const labelBorderColor = "#ADB5BD";   // Medium gray for subtle border
+  const labelBackgroundColor = "var(--color-label-bg)";
+  const labelTextColor = "var(--color-label-text)";
+  const labelBorderColor = "var(--color-label-border)";
   const labelTextFontSize = "13px";
   const labelFontWeight = "500";
   const labelPaddingX = 8; // Horizontal padding inside the label rect
@@ -107,7 +109,7 @@ export const BaseballDiamondSVG: React.FC<BaseballDiamondSVGProps> = ({
   return (
     <svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" className={className}>
       {/* Infield Grass/Dirt */}
-      <polygon points="200,310 310,200 200,90 90,200" fill="#a1c969" />
+      <polygon points="200,310 310,200 200,90 90,200" fill={infieldGrassColor} />
 
       {/* Base lines (black border) */}
       <line x1="200" y1="300" x2="300" y2="200" stroke={baseStrokeColor} strokeWidth={baseLineWidth}/>
@@ -116,10 +118,10 @@ export const BaseballDiamondSVG: React.FC<BaseballDiamondSVGProps> = ({
       <line x1="100" y1="200" x2="200" y2="300" stroke={baseStrokeColor} strokeWidth={baseLineWidth}/>
 
       {/* Inner white lines */}
-      <line x1="200" y1="300" x2="300" y2="200" stroke="white" strokeWidth={innerBaseLineWidth}/>
-      <line x1="300" y1="200" x2="200" y2="100" stroke="white" strokeWidth={innerBaseLineWidth}/>
-      <line x1="200" y1="100" x2="100" y2="200" stroke="white" strokeWidth={innerBaseLineWidth}/>
-      <line x1="100" y1="200" x2="200" y2="300" stroke="white" strokeWidth={innerBaseLineWidth}/>
+      <line x1="200" y1="300" x2="300" y2="200" stroke={baseLineColor} strokeWidth={innerBaseLineWidth}/>
+      <line x1="300" y1="200" x2="200" y2="100" stroke={baseLineColor} strokeWidth={innerBaseLineWidth}/>
+      <line x1="200" y1="100" x2="100" y2="200" stroke={baseLineColor} strokeWidth={innerBaseLineWidth}/>
+      <line x1="100" y1="200" x2="200" y2="300" stroke={baseLineColor} strokeWidth={innerBaseLineWidth}/>
 
       {/* First Base (1B) - bases[0] */}
       <g onClick={() => handleBaseInteraction(0)} style={{ cursor: disabled ? 'default' : 'pointer' }} role="button" aria-label="Primera base" aria-pressed={!!bases[0]}>
@@ -160,13 +162,13 @@ export const BaseballDiamondSVG: React.FC<BaseballDiamondSVGProps> = ({
 
       {/* Pitcher's Mound */}
       <circle cx="200" cy="200" r="25" fill={dirtColor}/>
-      <rect x="190" y="196" width="20" height="8" fill="white" stroke={baseStrokeColor} strokeWidth="1"/>
+      <rect x="190" y="196" width="20" height="8" fill={baseLineColor} stroke={baseStrokeColor} strokeWidth="1"/>
 
       {/* Home Plate */}
       <g>
         <polygon
           points="190,315 210,315 210,300 200,290 190,300"
-          fill="white" stroke={baseStrokeColor} strokeWidth={baseStrokeWidth}
+          fill={emptyBaseColor} stroke={baseStrokeColor} strokeWidth={baseStrokeWidth}
         />
       </g>
     </svg>

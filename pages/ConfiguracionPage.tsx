@@ -51,8 +51,8 @@ const ConfiguracionPage: React.FC = () => {
   };
 
   return (
-    <div className="p-6 bg-white shadow-lg rounded-lg max-w-2xl mx-auto">
-      <h1 className="text-3xl font-bold mb-6 text-gray-800">Configuración General</h1>
+    <div className="p-6 bg-white dark:bg-gray-800 shadow-lg rounded-lg max-w-2xl mx-auto">
+      <h1 className="text-3xl font-bold mb-6 text-gray-800 dark:text-gray-100">Configuración General</h1>
       <div className="space-y-6">
         <Input 
           label="Título de la Aplicación"
@@ -99,7 +99,7 @@ const ConfiguracionPage: React.FC = () => {
             onChange={handleInputChange}
             className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
           />
-          <label htmlFor="showAdditionalDetailsDefault" className="ml-2 block text-sm text-gray-900">
+          <label htmlFor="showAdditionalDetailsDefault" className="ml-2 block text-sm text-gray-900 dark:text-gray-300">
             Mostrar "Detalles Adicionales del Juego" por defecto
           </label>
         </div>

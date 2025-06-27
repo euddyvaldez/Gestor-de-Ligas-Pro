@@ -31,7 +31,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={title} size="sm">
       <div className="space-y-4">
-        {typeof message === 'string' ? <p className="text-sm text-gray-600">{message}</p> : message}
+        <div className="text-sm text-gray-600 dark:text-gray-300">{message}</div>
         <div className="flex justify-end space-x-3 pt-3">
           <Button onClick={onClose} variant="light">
             {cancelButtonText}

@@ -19,31 +19,31 @@ const Table = <T extends { id?: string | number }>(
   { columns, data }: TableProps<T>
 ): ReactNode => {
   return (
-    <div className="overflow-x-auto shadow border-b border-gray-200 sm:rounded-lg">
-      <table className="min-w-full divide-y divide-gray-200 table-auto"> {/* Changed to table-auto for better default sizing */}
-        <thead className="bg-gray-50">
+    <div className="overflow-x-auto shadow border-b border-gray-200 dark:border-gray-700 sm:rounded-lg">
+      <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 table-auto"> {/* Changed to table-auto for better default sizing */}
+        <thead className="bg-gray-50 dark:bg-slate-800">
           <tr>
             {columns.map((col, index) => (
               <th
                 key={index}
                 scope="col"
-                className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${col.className || ''}`}
+                className={`px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider ${col.className || ''}`}
               >
                 {col.header}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody className="bg-white divide-y divide-gray-200">
+        <tbody className="bg-white dark:bg-slate-900 divide-y divide-gray-200 dark:divide-gray-700">
           {data.length === 0 ? (
             <tr>
-              <td colSpan={columns.length} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
+              <td colSpan={columns.length} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 text-center">
                 No hay datos disponibles.
               </td>
             </tr>
           ) : (
             data.map((item, rowIndex) => (
-              <tr key={item.id || rowIndex} className="hover:bg-gray-50">
+              <tr key={item.id || rowIndex} className="hover:bg-gray-50 dark:hover:bg-slate-800">
                 {columns.map((col, colIndex) => {
                   let cellContent: ReactNode;
                   if (col.render) {
@@ -57,7 +57,7 @@ const Table = <T extends { id?: string | number }>(
                   return (
                     <td 
                       key={colIndex} 
-                      className={`px-6 py-4 whitespace-nowrap text-sm text-gray-700 ${col.className || ''}`}
+                      className={`px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-200 ${col.className || ''}`}
                     >
                       {cellContent}
                     </td>
