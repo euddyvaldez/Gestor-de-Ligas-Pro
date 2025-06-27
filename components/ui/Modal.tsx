@@ -23,11 +23,11 @@ const Modal: React.FC<ModalProps> = ({
 
   return (
     <div 
-      className="fixed inset-0 bg-black bg-opacity-60 dark:bg-opacity-75 z-50 flex justify-center items-center p-4 transition-opacity duration-300 ease-in-out"
+      className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center p-4 transition-opacity duration-300 ease-in-out"
       onClick={onClose}
     >
       <div 
-        className={`bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 relative ${sizeClasses[size]} w-full transform transition-all duration-300 ease-in-out scale-95 opacity-0 animate-modalShow flex flex-col`} // Added flex flex-col
+        className={`bg-white rounded-lg shadow-xl p-6 relative ${sizeClasses[size]} w-full transform transition-all duration-300 ease-in-out scale-95 opacity-0 animate-modalShow flex flex-col`} // Added flex flex-col
         onClick={e => e.stopPropagation()} 
         style={{ animationName: 'modalShowAnim', animationDuration: '0.3s', animationFillMode: 'forwards' }}
       >
@@ -35,13 +35,13 @@ const Modal: React.FC<ModalProps> = ({
           {!hideCloseButton && (
             <button 
               onClick={onClose}
-              className="absolute top-3 right-3 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white text-2xl z-10"
+              className="absolute top-3 right-3 text-gray-500 hover:text-gray-700 text-2xl z-10"
               aria-label="Cerrar modal"
             >
               &times;
             </button>
           )}
-          {title && <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-100">{title}</h2>}
+          {title && <h2 className="text-xl font-semibold mb-4 text-gray-800">{title}</h2>}
         </div>
         <div className={`flex-grow overflow-y-auto ${contentClassName}`}> {/* Content part with applied class */}
           {children}

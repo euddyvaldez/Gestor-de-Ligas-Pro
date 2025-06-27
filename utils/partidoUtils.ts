@@ -1,3 +1,4 @@
+
 import { LineupPlayer, BatterStats, GameStatus, PartidoData, AppGlobalConfig, Formato, EMPTY_POSICION_PLACEHOLDER, TeamStats } from '../types';
 
 export const createEmptyBatterStats = (): BatterStats => ({ 
@@ -26,8 +27,8 @@ export const createEmptyGameStatus = (): GameStatus => ({
 });
 
 export const initialPartidoData = (config: AppGlobalConfig, selectedFormato?: Formato): Omit<PartidoData, 'idJuego' | 'lineupVisitante' | 'lineupLocal' | 'visitanteStats' | 'localStats' | 'registrosJuego' | 'gameStatus'> & { gameStatus: GameStatus, lineupVisitante: LineupPlayer[], lineupLocal: LineupPlayer[], visitanteStats: ReturnType<typeof createEmptyTeamStats>, localStats: ReturnType<typeof createEmptyTeamStats>, registrosJuego: [] } => ({
-  fecha: '',
-  formatoJuegoId: 0,
+  fecha: new Date().toISOString().split('T')[0],
+  formatoJuegoId: selectedFormato?.codigo || 0,
   numeroJuego: '', 
   nombreEquipoVisitante: config.defaultVisitanteTeamName,
   nombreEquipoLocal: config.defaultLocalTeamName,

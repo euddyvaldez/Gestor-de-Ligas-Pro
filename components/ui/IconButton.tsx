@@ -1,8 +1,6 @@
-
 import React from 'react';
 import { MdSettings } from 'react-icons/md'; // Import MdSettings
 import { FaSortUp, FaSortDown } from 'react-icons/fa'; // Added for triangle arrows
-import { FiSun, FiMoon } from 'react-icons/fi'; // For theme switcher
 
 interface IconButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   icon: React.ReactNode;
@@ -14,7 +12,7 @@ const IconButton: React.FC<IconButtonProps> = ({ icon, label, className = '', ..
     <button
       type="button"
       aria-label={label}
-      className={`p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition duration-150 ease-in-out ${className}`}
+      className={`p-2 rounded-full hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition duration-150 ease-in-out ${className}`}
       {...props}
     >
       {icon}
@@ -78,13 +76,4 @@ export const ArrowUpTriangleIcon: React.FC<{ className?: string }> = ({ classNam
 
 export const ArrowDownTriangleIcon: React.FC<{ className?: string }> = ({ className }) => (
   <FaSortDown className={`w-4 h-4 ${className}`} />
-);
-
-// New Theme Icons
-export const SunIcon: React.FC<{ className?: string }> = ({ className }) => (
-  <FiSun className={`w-5 h-5 ${className}`} />
-);
-
-export const MoonIcon: React.FC<{ className?: string }> = ({ className }) => (
-  <FiMoon className={`w-5 h-5 ${className}`} />
 );

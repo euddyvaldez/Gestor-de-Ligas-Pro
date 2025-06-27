@@ -1,4 +1,3 @@
-
 import React, { useEffect } from 'react';
 import { HashRouter, Routes, Route } from 'react-router-dom';
 import MainLayout from './layouts/MainLayout';
@@ -27,28 +26,6 @@ import { getNextCodigo } from './utils/idGenerator';
 
 const App: React.FC = () => {
   const [appConfigFromHook] = useLocalStorage<AppGlobalConfig>(APP_CONFIG_KEY, DEFAULT_GLOBAL_CONFIG);
-  const [theme] = useLocalStorage<'light' | 'dark' | 'system'>('theme', 'system');
-
-  useEffect(() => {
-    const isDark =
-      theme === 'dark' ||
-      (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    document.documentElement.classList.toggle('dark', isDark);
-  }, [theme]);
-
-  // This effect handles the case where the user's OS theme changes while the app theme is set to 'system'.
-  useEffect(() => {
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    
-    const handleChange = (e: MediaQueryListEvent) => {
-      if (theme === 'system') {
-        document.documentElement.classList.toggle('dark', e.matches);
-      }
-    };
-    
-    mediaQuery.addEventListener('change', handleChange);
-    return () => mediaQuery.removeEventListener('change', handleChange);
-  }, [theme]);
 
   useEffect(() => {
     const seedInitialData = () => {

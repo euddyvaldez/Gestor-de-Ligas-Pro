@@ -475,9 +475,9 @@ const JugadoresPage: React.FC = () => {
   return (
     <div className="space-y-8">
       {/* Player Management Section */}
-      <div className="p-6 bg-white dark:bg-gray-800 shadow-md rounded-lg">
-        <h2 className="text-2xl font-semibold mb-4 text-gray-700 dark:text-gray-200">Añadir Nuevo Jugador</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">Si deja el nombre vacío y hace clic en "Añadir Jugador", se generará un jugador con datos aleatorios. El nombre del jugador debe ser único.</p>
+      <div className="p-6 bg-white shadow-md rounded-lg">
+        <h2 className="text-2xl font-semibold mb-4 text-gray-700">Añadir Nuevo Jugador</h2>
+        <p className="text-sm text-gray-500 mb-3">Si deja el nombre vacío y hace clic en "Añadir Jugador", se generará un jugador con datos aleatorios. El nombre del jugador debe ser único.</p>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
           <Input label="Nombre del Jugador" placeholder="Nombre (o dejar vacío para aleatorio)" value={newNombre} onChange={e => setNewNombre(e.target.value)} id="newPlayerName"/>
           <Input label="Número (Ej: 7, 23) (opcional)" placeholder="Número" value={newNumero} onChange={e => setNewNumero(e.target.value)} id="newPlayerNumber"/>
@@ -489,8 +489,8 @@ const JugadoresPage: React.FC = () => {
           <Button onClick={handleClearNewPlayerForm} variant="light"><CancelIcon className="inline mr-2 h-4 w-4"/> Limpiar Formulario</Button>
         </div>
       </div>
-       <div className="p-6 bg-white dark:bg-gray-800 shadow-md rounded-lg">
-        <h3 className="text-xl font-semibold mb-3 text-gray-700 dark:text-gray-200">Importar / Exportar Jugadores</h3>
+       <div className="p-6 bg-white shadow-md rounded-lg">
+        <h3 className="text-xl font-semibold mb-3 text-gray-700">Importar / Exportar Jugadores</h3>
         <div className="flex space-x-3 flex-wrap gap-y-2">
             <Button onClick={handleExportJugadoresCSV} variant="secondary">Exportar Jugadores (CSV)</Button>
             <Button onClick={handleImportJugadoresClick} variant="info">Importar Jugadores (CSV)</Button>
@@ -498,24 +498,24 @@ const JugadoresPage: React.FC = () => {
         </div>
       </div>
       
-      <div className="bg-white dark:bg-gray-800 shadow-md rounded-lg">
-        <button onClick={() => setIsPlayerListExpanded(!isPlayerListExpanded)} className="w-full p-4 text-left text-xl font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 flex justify-between items-center rounded-t-lg" aria-expanded={isPlayerListExpanded}>
+      <div className="bg-white shadow-md rounded-lg">
+        <button onClick={() => setIsPlayerListExpanded(!isPlayerListExpanded)} className="w-full p-4 text-left text-xl font-semibold text-gray-700 hover:bg-gray-50 flex justify-between items-center rounded-t-lg" aria-expanded={isPlayerListExpanded}>
           Lista de Jugadores ({processedJugadores.length})
           <svg className={`w-6 h-6 transform transition-transform duration-200 ${isPlayerListExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
         </button>
         {isPlayerListExpanded && (
-          <div className="p-6 border-t border-gray-200 dark:border-gray-700">
+          <div className="p-6 border-t border-gray-200">
              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center mb-4">
               <Input type="text" placeholder="Buscar jugador..." value={searchTermJugador} onChange={e => setSearchTermJugador(e.target.value)} className="max-w-xs flex-grow" id="searchJugador" label="Buscar en la lista:"/>
               <div>
-                <label htmlFor="filterPosicion" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Filtrar por Posición:</label>
+                <label htmlFor="filterPosicion" className="block text-sm font-medium text-gray-700 mb-1">Filtrar por Posición:</label>
                 <Select id="filterPosicion" options={filterPosicionOptions} value={filterPosicion} onChange={e => setFilterPosicion(e.target.value)}/>
               </div>
               <div>
-                <label htmlFor="sortFieldJugador" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Ordenar por:</label>
+                <label htmlFor="sortFieldJugador" className="block text-sm font-medium text-gray-700 mb-1">Ordenar por:</label>
                 <div className="flex items-center space-x-2">
                   <Select id="sortFieldJugador" options={sortFieldOptionsJugador} value={sortFieldJugador} onChange={e => setSortFieldJugador(e.target.value as SortableJugadorFields)} className="flex-grow"/>
-                  <IconButton onClick={toggleSortOrderJugador} icon={sortOrderJugador === 'asc' ? <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M14.707 10.293a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L9 12.586V5a1 1 0 012 0v7.586l2.293-2.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg> : <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.293 9.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 7.414V15a1 1 0 11-2 0V7.414L6.707 9.707a1 1 0 01-1.414 0z" clipRule="evenodd" /></svg>} label={sortOrderJugador === 'asc' ? 'Orden Ascendente' : 'Orden Descendente'} className="p-2 border rounded hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-700"/>
+                  <IconButton onClick={toggleSortOrderJugador} icon={sortOrderJugador === 'asc' ? <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M14.707 10.293a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L9 12.586V5a1 1 0 012 0v7.586l2.293-2.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg> : <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.293 9.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 7.414V15a1 1 0 11-2 0V7.414L6.707 9.707a1 1 0 01-1.414 0z" clipRule="evenodd" /></svg>} label={sortOrderJugador === 'asc' ? 'Orden Ascendente' : 'Orden Descendente'} className="p-2 border rounded hover:bg-gray-100"/>
                 </div>
               </div>
             </div>
@@ -525,13 +525,13 @@ const JugadoresPage: React.FC = () => {
       </div>
 
       {/* Team Management Section */}
-      <div className="bg-white dark:bg-gray-800 p-6 shadow-md rounded-lg">
-        <button onClick={() => setIsTeamListExpanded(!isTeamListExpanded)} className="w-full p-4 text-left text-xl font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 flex justify-between items-center rounded-t-lg -mx-4 -mt-6 mb-2" aria-expanded={isTeamListExpanded}>
+      <div className="p-6 bg-white shadow-md rounded-lg">
+        <button onClick={() => setIsTeamListExpanded(!isTeamListExpanded)} className="w-full p-4 text-left text-xl font-semibold text-gray-700 hover:bg-gray-50 flex justify-between items-center rounded-t-lg" aria-expanded={isTeamListExpanded}>
           Gestión de Equipos ({filteredEquipos.length})
           <svg className={`w-6 h-6 transform transition-transform duration-200 ${isTeamListExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
         </button>
         {isTeamListExpanded && (
-            <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+            <div className="p-6 border-t border-gray-200">
                 <div className="mb-4 flex flex-wrap gap-4 items-center">
                     <Button onClick={() => handleOpenTeamModal()} variant="primary">Crear Nuevo Equipo</Button>
                     <Input type="text" placeholder="Buscar equipo..." value={searchTermEquipo} onChange={e => setSearchTermEquipo(e.target.value)} className="max-w-xs" label="Buscar Equipo:"/>
@@ -562,22 +562,22 @@ const JugadoresPage: React.FC = () => {
         <div className="space-y-4">
           <Input label="Nombre del Equipo" value={teamNameInput} onChange={e => setTeamNameInput(e.target.value)} required />
           <div>
-            <h3 className="text-md font-medium text-gray-700 dark:text-gray-200 mb-2">Seleccionar Jugadores:</h3>
-            <div className="max-h-60 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded-md p-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {jugadores.length === 0 && <p className="text-gray-500 dark:text-gray-400">No hay jugadores creados.</p>}
+            <h3 className="text-md font-medium text-gray-700 mb-2">Seleccionar Jugadores:</h3>
+            <div className="max-h-60 overflow-y-auto border border-gray-200 rounded-md p-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {jugadores.length === 0 && <p className="text-gray-500">No hay jugadores creados.</p>}
               {jugadores.map(jugador => {
                 const teamNameIfAssigned = getTeamNameForPlayerModal(jugador.codigo);
                 const isDisabled = !!teamNameIfAssigned;
                  return (
-                  <label key={jugador.codigo} className={`p-2 border rounded flex items-center ${selectedPlayerIdsForTeam.has(jugador.codigo) ? 'bg-blue-100 dark:bg-blue-900 border-blue-400 dark:border-blue-700' : ''} ${isDisabled && !selectedPlayerIdsForTeam.has(jugador.codigo) ? 'bg-gray-100 dark:bg-gray-700 opacity-60 cursor-not-allowed' : 'hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer'}`}>
+                  <label key={jugador.codigo} className={`p-2 border rounded flex items-center ${selectedPlayerIdsForTeam.has(jugador.codigo) ? 'bg-blue-100 border-blue-400' : ''} ${isDisabled && !selectedPlayerIdsForTeam.has(jugador.codigo) ? 'bg-gray-100 opacity-60 cursor-not-allowed' : 'hover:bg-gray-50 cursor-pointer'}`}>
                     <input type="checkbox" checked={selectedPlayerIdsForTeam.has(jugador.codigo)} onChange={() => handleTogglePlayerSelectionForTeam(jugador.codigo)} disabled={isDisabled && !selectedPlayerIdsForTeam.has(jugador.codigo)} className="mr-2 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"/>
-                    <span className="flex-grow text-gray-800 dark:text-gray-200">{jugador.nombre}</span>
+                    <span className="flex-grow">{jugador.nombre}</span>
                     {teamNameIfAssigned && <span className="text-xs text-red-500 ml-2 truncate">(En {teamNameIfAssigned})</span>}
                   </label>
                 );
               })}
             </div>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Jugadores seleccionados: {selectedPlayerIdsForTeam.size}</p>
+            <p className="text-sm text-gray-500 mt-1">Jugadores seleccionados: {selectedPlayerIdsForTeam.size}</p>
           </div>
           <div className="flex justify-end space-x-3 pt-2">
             <Button onClick={handleCloseTeamModal} variant="light">Cancelar</Button>

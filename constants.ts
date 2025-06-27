@@ -63,17 +63,7 @@ export const defaultJugadas: Omit<Jugada, 'codigo'>[] = [
 ];
 
 export const defaultFormatos: Omit<Formato, 'codigo'>[] = [
-  { descripcion: 'INTERLIGA 4 Innings', cantidadInning: 4, isDefault: true },
-  { descripcion: 'INTERLIGA 5 Innings', cantidadInning: 5, isDefault: true },
-  { descripcion: 'INTERLIGA 6 Innings', cantidadInning: 6, isDefault: true },
-  { descripcion: 'INTERLIGA 7 Innings', cantidadInning: 7, isDefault: true },
-  { descripcion: 'FOGUEO 4 Innings', cantidadInning: 4, isDefault: true },
-  { descripcion: 'FOGUEO 5 Innings', cantidadInning: 5, isDefault: true },
-  { descripcion: 'FOGUEO 6 Innings', cantidadInning: 6, isDefault: true },
-  { descripcion: 'FOGUEO 7 Innings', cantidadInning: 7, isDefault: true },
-  { descripcion: 'TORNEO 4 Innings', cantidadInning: 4, isDefault: true },
-  { descripcion: 'TORNEO 5 Innings', cantidadInning: 5, isDefault: true },
-  { descripcion: 'TORNEO 6 Innings', cantidadInning: 6, isDefault: true },
-  { descripcion: 'TORNEO 7 Innings', cantidadInning: 7, isDefault: true },
+  { descripcion: 'INTERLIGA 7 innings', cantidadInning: 7, isDefault: true },
+  { descripcion: 'FOGUEO 5 innings', cantidadInning: 5, isDefault: true },
   { descripcion: 'ESTANDAR 9 innings', cantidadInning: 9, isDefault: true },
 ];

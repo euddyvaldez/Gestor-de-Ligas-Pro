@@ -10,7 +10,7 @@ const Footer: React.FC = () => {
   const appTitle = appConfig.appTitle || DEFAULT_APP_TITLE; // appConfig is now guaranteed to be AppGlobalConfig
 
   return (
-    <footer className="bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-center p-4 mt-auto shadow-inner">
+    <footer className="bg-gray-800 text-white text-center p-4 mt-auto">
       <p>&copy; {year} {appTitle}. Todos los derechos reservados.</p>
     </footer>
   );

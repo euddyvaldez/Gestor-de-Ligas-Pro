@@ -73,7 +73,7 @@ const HomePage: React.FC = () => {
 
   return (
     <div className="text-center">
-      <h1 className="text-4xl font-bold mb-8 text-gray-700 dark:text-gray-200">Menú Principal</h1>
+      <h1 className="text-4xl font-bold mb-8 text-gray-700">Menú Principal</h1>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {menuItems.map(item => (
           <Link key={item.path} to={item.path} className="no-underline">

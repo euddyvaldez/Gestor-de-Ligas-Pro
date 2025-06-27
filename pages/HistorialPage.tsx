@@ -88,8 +88,8 @@ const HistorialPage: React.FC = () => {
   }, [historial, searchTerm]);
 
   return (
-    <div className="p-6 bg-white dark:bg-gray-800 shadow-lg rounded-lg">
-      <h1 className="text-3xl font-bold mb-6 text-gray-800 dark:text-gray-100">Historial de Juegos</h1>
+    <div className="p-6 bg-white shadow-lg rounded-lg">
+      <h1 className="text-3xl font-bold mb-6 text-gray-800">Historial de Juegos</h1>
       <Input
         type="text"
         placeholder="Buscar juego (fecha, equipo, formato...)"
@@ -98,18 +98,18 @@ const HistorialPage: React.FC = () => {
         className="mb-6 w-full max-w-md"
       />
       {filteredHistorial.length === 0 ? (
-        <p className="text-gray-600 dark:text-gray-300">No hay juegos guardados o que coincidan con su búsqueda.</p>
+        <p className="text-gray-600">No hay juegos guardados o que coincidan con su búsqueda.</p>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredHistorial.map(juego => (
-            <div key={juego.idJuego} className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg shadow hover:shadow-md transition-shadow">
-              <h2 className="text-xl font-semibold text-blue-600 dark:text-blue-400">{juego.nombreEquipoVisitante} vs {juego.nombreEquipoLocal}</h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Fecha del juego: {new Date(juego.fecha).toLocaleDateString()}</p>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Número de Juego: {juego.numeroJuego || 'N/A'}</p>
-              <p className="text-lg font-bold my-2 text-gray-800 dark:text-gray-100">
+            <div key={juego.idJuego} className="bg-gray-50 p-4 rounded-lg shadow hover:shadow-md transition-shadow">
+              <h2 className="text-xl font-semibold text-blue-600">{juego.nombreEquipoVisitante} vs {juego.nombreEquipoLocal}</h2>
+              <p className="text-sm text-gray-500">Fecha del juego: {new Date(juego.fecha).toLocaleDateString()}</p>
+              <p className="text-sm text-gray-500">Número de Juego: {juego.numeroJuego || 'N/A'}</p>
+              <p className="text-lg font-bold my-2">
                 Resultado: {juego.visitanteStats.totalRuns} - {juego.localStats.totalRuns}
               </p>
-              <p className="text-xs text-gray-400 dark:text-gray-500">Guardado: {new Date(juego.timestampGuardado).toLocaleString()}</p>
+              <p className="text-xs text-gray-400">Guardado: {new Date(juego.timestampGuardado).toLocaleString()}</p>
               <div className="mt-4 space-x-2 flex flex-wrap gap-2">
                 <Button onClick={() => handleVerContinuar(juego)} variant="info" size="sm">Ver / Continuar</Button>
                 <Button onClick={() => handleExportCSV(juego)} variant="secondary" size="sm">Exportar Log (CSV)</Button>

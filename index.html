@@ -25,53 +25,13 @@
       --color-background-alt: #f1f3f5; /* Fondo alternativo */
       --color-border: #dee2e6; /* Bordes */
 
-      /* SVG colors */
-      --color-dirt: #D2B48C;
-      --color-base-empty: white;
-      --color-base-stroke: black;
-      --color-base-line: white;
-      --color-infield-grass: #a1c969;
-      --color-label-bg: #E9ECEF;
-      --color-label-text: #212529;
-      --color-label-border: #ADB5BD;
-
       --font-family-sans-serif: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
       --font-family-monospace: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     }
-
-    html.dark {
-        color-scheme: dark;
-        --color-primary: #3b82f6;
-        --color-primary-dark: #2563eb;
-        --color-secondary: #9ca3af;
-        --color-success: #22c55e;
-        --color-danger: #ef4444;
-        --color-warning: #f59e0b;
-        --color-info: #38bdf8;
-        --color-light: #374151;
-        --color-dark: #f9fafb;
-        --color-text: #f9fafb;
-        --color-text-muted: #9ca3af;
-        --color-background: #111827;
-        --color-background-alt: #1f2937;
-        --color-border: #4b5563;
-
-        /* SVG colors dark */
-        --color-dirt: #856d4b;
-        --color-base-empty: #4b5563; /* gray-600 */
-        --color-base-stroke: #f9fafb; /* gray-50 */
-        --color-base-line: #d1d5db; /* gray-300 */
-        --color-infield-grass: #5a7d3c;
-        --color-label-bg: #374151; /* gray-700 */
-        --color-label-text: #f9fafb; /* gray-50 */
-        --color-label-border: #6b7280; /* gray-500 */
-    }
-
     body {
       font-family: var(--font-family-sans-serif);
       color: var(--color-text);
       background-color: var(--color-background-alt);
-      transition: background-color 0.3s ease, color 0.3s ease;
     }
     .btn-primary {
       background-color: var(--color-primary);
@@ -97,25 +57,15 @@
       transition: all 0.3s ease-in-out;
     }
   </style>
-<script>
-    tailwind.config = {
-      darkMode: 'class', // Enable class-based dark mode
-      theme: {
-        extend: {
-          // You can extend tailwind theme here if needed
-        }
-      }
-    }
-</script>
 <script type="importmap">
 {
   "imports": {
-    "react": "https://esm.sh/react@^19.1.0",
-    "react/": "https://esm.sh/react@^19.1.0/",
-    "react-dom/": "https://esm.sh/react-dom@^19.1.0/",
-    "react-router-dom": "https://esm.sh/react-router-dom@^7.6.2",
-    "papaparse": "https://esm.sh/papaparse@^5.5.3",
-    "react-icons/": "https://esm.sh/react-icons@^5.5.0/"
+    "react": "https://esm.sh/react@^19.0.0",
+    "react/": "https://esm.sh/react@^19.0.0/",
+    "react-dom/": "https://esm.sh/react-dom@^19.0.0/",
+    "react-router-dom": "https://esm.sh/react-router-dom@^6.24.1",
+    "papaparse": "https://esm.sh/papaparse@^5.4.1",
+    "react-icons/": "https://esm.sh/react-icons@^5.2.1/"
   }
 }
 </script>

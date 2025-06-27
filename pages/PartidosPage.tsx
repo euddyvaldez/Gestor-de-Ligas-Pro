@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, ChangeEvent, useRef, useMemo, DragEvent } from 'react';
 import Papa from 'papaparse';
 import { useNavigate } from 'react-router-dom';
@@ -1598,6 +1599,202 @@ export const PartidosPage: React.FC = () => {
     }
   };
 
+  const handleConfirmRunnerAdvancementsFromErrorModal = (
+    runnerAdvancements: { [lineupPlayerId: string]: number },
+    originalFielderErrorId: number | null,
+    batterAtPlay: LineupPlayer,
+    batterDestBase: 0 | 1 | 2 | 3 // 0=1B, 1=2B, etc.
+  ) => {
+    if (!currentPartido) return;
+    saveToHistory(currentPartido);
+    const initialBasesForLog = [...currentPartido.gameStatus.bases]; 
+    const outsBeforePlayForLog = currentPartido.gameStatus.outs;
+
+    updateCurrentPartidoAndHistory(prev => {
+      if (!prev) return prev;
+      let updatedPartido = { ...prev };
+      let newBasesState: [PlayerOnBase | null, PlayerOnBase | null, PlayerOnBase | null] = [null, null, null];
+      let runsScoredThisPlayByRunners = 0;
+      let outsGeneratedThisPlay = 0;
+      
+      const batterAsPlayerOnBase: PlayerOnBase = {
+        lineupPlayerId: batterAtPlay.id,
+        jugadorId: batterAtPlay.jugadorId,
+        nombreJugador: batterAtPlay.nombreJugador,
+        reachedOnJugadaId: 'E'
+      };
+
+      const pitcher = getCurrentOpposingPitcher(updatedPartido);
+      const formatoDesc = formatos.find(f => f.codigo === updatedPartido.formatoJuegoId)?.descripcion || 'N/A';
+      const teamAtBatNombre = updatedPartido.gameStatus.currentHalfInning === 'Top' ? updatedPartido.nombreEquipoVisitante : updatedPartido.nombreEquipoLocal;
+      const batterLineupKey = updatedPartido.gameStatus.currentHalfInning === 'Top' ? 'lineupVisitante' : 'lineupLocal';
+      
+      updatedPartido[batterLineupKey] = updatedPartido[batterLineupKey].map(p => {
+        if (p.id === batterAtPlay.id) {
+            const newStats = { ...p.stats };
+            newStats.atBats += 1; 
+            newStats.plateAppearances += 1;
+            return { ...p, stats: newStats };
+        }
+        return p;
+      });
+
+
+      runnerAdvancementAfterErrorModalState.runnersOnBaseAtTimeOfError.forEach(runnerInfo => {
+        const targetBase = runnerAdvancements[runnerInfo.lineupPlayerId];
+        const runnerLineupPlayer = updatedPartido[batterLineupKey].find(p => p.id === runnerInfo.lineupPlayerId);
+
+        if (targetBase === 0) { 
+          outsGeneratedThisPlay++;
+          const outLog: RegistroJuego = {
+            id: generateUUID(), timestamp: Date.now(), inning: updatedPartido.gameStatus.actualInningNumber,
+            halfInning: updatedPartido.gameStatus.currentHalfInning, bateadorId: runnerInfo.lineupPlayerId, 
+            bateadorNombre: runnerInfo.nombreJugador, bateadorPosicion: runnerLineupPlayer?.posicion || '',
+            pitcherResponsableId: pitcher ? pitcher.id : null, pitcherResponsableNombre: pitcher ? pitcher.nombreJugador : null,
+            equipoBateadorNombre: teamAtBatNombre, jugadaId: 'OUT_ROE', 
+            descripcion: getOriginalJugadaDescription('OUT_ROE', `Out Corredor en Jugada de Error`),
+            outsPrev: outsBeforePlayForLog + outsGeneratedThisPlay - 1, outsAfter: outsBeforePlayForLog + outsGeneratedThisPlay,
+            basesPrevState: initialBasesForLog.map(p => p ? p.lineupPlayerId : 'null').join('-'),
+            basesAfterState: "Pending", 
+            runScored: 0, rbi: 0,
+            fechaDelPartido: updatedPartido.fecha, formatoDelPartidoDesc: formatoDesc, numeroDelPartido: updatedPartido.numeroJuego, ordenDelBateador: runnerLineupPlayer?.ordenBate || 0,
+          };
+          updatedPartido.registrosJuego.push(outLog);
+           if(runnerLineupPlayer){
+                const updatedInnings = { ...runnerLineupPlayer.innings };
+                if (!updatedInnings[outLog.inning]) updatedInnings[outLog.inning] = [];
+                updatedInnings[outLog.inning].push({playInstanceId: outLog.id, jugadaId: 'OUT_ROE', descripcion: outLog.descripcion, playDisplayValue: 'Out'});
+                updatedPartido[batterLineupKey] = updatedPartido[batterLineupKey].map(p => p.id === runnerLineupPlayer.id ? {...runnerLineupPlayer, innings: updatedInnings} : p);
+            }
+
+        } else if (targetBase === 4) { 
+          _applySingleRunScoringLogic(updatedPartido, runnerInfo, null); 
+          runsScoredThisPlayByRunners++;
+          const runLog: RegistroJuego = { 
+             id: generateUUID(), timestamp: Date.now(), inning: updatedPartido.gameStatus.actualInningNumber,
+            halfInning: updatedPartido.gameStatus.currentHalfInning, bateadorId: runnerInfo.lineupPlayerId,
+            bateadorNombre: runnerInfo.nombreJugador, bateadorPosicion: runnerLineupPlayer?.posicion || '',
+            pitcherResponsableId: pitcher ? pitcher.id : null, pitcherResponsableNombre: pitcher ? pitcher.nombreJugador : null,
+            equipoBateadorNombre: teamAtBatNombre, jugadaId: 'R', 
+            descripcion: getOriginalJugadaDescription('R', `Carrera Anotada`),
+            outsPrev: outsBeforePlayForLog + outsGeneratedThisPlay, outsAfter: outsBeforePlayForLog + outsGeneratedThisPlay,
+            basesPrevState: initialBasesForLog.map(p => p ? p.lineupPlayerId : 'null').join('-'),
+            basesAfterState: "Pending",
+            runScored: 1, rbi: 0,
+            fechaDelPartido: updatedPartido.fecha, formatoDelPartidoDesc: formatoDesc, numeroDelPartido: updatedPartido.numeroJuego, ordenDelBateador: runnerLineupPlayer?.ordenBate || 0,
+          };
+          updatedPartido.registrosJuego.push(runLog);
+           if(runnerLineupPlayer){
+                const updatedInnings = { ...runnerLineupPlayer.innings };
+                if (!updatedInnings[runLog.inning]) updatedInnings[runLog.inning] = [];
+                updatedInnings[runLog.inning].push({playInstanceId: runLog.id, jugadaId: 'R', descripcion: runLog.descripcion, playDisplayValue: 'R'});
+                 updatedPartido[batterLineupKey] = updatedPartido[batterLineupKey].map(p => p.id === runnerLineupPlayer.id ? {...runnerLineupPlayer, innings: updatedInnings} : p);
+            }
+        } else if (targetBase >= 1 && targetBase <= 3) {
+          newBasesState[targetBase - 1] = runnerInfo;
+        }
+      });
+      
+      let runsScoredByBatter = 0;
+      if (batterDestBase === 3) { 
+        _applySingleRunScoringLogic(updatedPartido, batterAtPlay, null); 
+        runsScoredByBatter++;
+      } else if (batterDestBase >= 0 && batterDestBase <= 2) {
+        newBasesState[batterDestBase] = batterAsPlayerOnBase;
+      }
+      
+      const defensiveTeamKey = updatedPartido.gameStatus.currentHalfInning === 'Top' ? 'localStats' : 'visitanteStats';
+      updatedPartido[defensiveTeamKey].errors += 1;
+
+      const batterErrorLog: RegistroJuego = {
+        id: generateUUID(), timestamp: Date.now(), inning: updatedPartido.gameStatus.actualInningNumber,
+        halfInning: updatedPartido.gameStatus.currentHalfInning, bateadorId: batterAtPlay.id,
+        bateadorNombre: batterAtPlay.nombreJugador, bateadorPosicion: batterAtPlay.posicion,
+        pitcherResponsableId: pitcher ? pitcher.id : null, pitcherResponsableNombre: pitcher ? pitcher.nombreJugador : null,
+        equipoBateadorNombre: teamAtBatNombre, jugadaId: 'E',
+        descripcion: getOriginalJugadaDescription('E', "Error (permite embasarse)"),
+        outsPrev: outsBeforePlayForLog, outsAfter: outsBeforePlayForLog + outsGeneratedThisPlay,
+        basesPrevState: initialBasesForLog.map(p => p ? p.lineupPlayerId : 'null').join('-'),
+        basesAfterState: newBasesState.map(p => p ? p.lineupPlayerId : 'null').join('-'),
+        runScored: runsScoredByBatter, rbi: 0, 
+        fechaDelPartido: updatedPartido.fecha, formatoDelPartidoDesc: formatoDesc, numeroDelPartido: updatedPartido.numeroJuego, ordenDelBateador: batterAtPlay.ordenBate,
+      };
+      updatedPartido.registrosJuego.push(batterErrorLog);
+      
+      const playInCellForBatter: PlayInInningCell = {
+          playInstanceId: batterErrorLog.id, jugadaId: 'E', descripcion: batterErrorLog.descripcion,
+          playDisplayValue: `E${runsScoredByBatter > 0 ? ' (Anota)' : ''}`
+      };
+      updatedPartido[batterLineupKey] = updatedPartido[batterLineupKey].map(p => {
+          if (p.id === batterAtPlay.id) {
+              const updatedInnings = { ...p.innings };
+              if (!updatedInnings[batterErrorLog.inning]) updatedInnings[batterErrorLog.inning] = [];
+              updatedInnings[batterErrorLog.inning].push(playInCellForBatter);
+              return { ...p, innings: updatedInnings };
+          }
+          return p;
+      });
+
+      if (originalFielderErrorId) {
+          const errorPlayerInfo = jugadoresDB.find(j => j.codigo === originalFielderErrorId);
+          if (errorPlayerInfo) {
+              const defensiveLineupKey = updatedPartido.gameStatus.currentHalfInning === 'Top' ? 'lineupLocal' : 'lineupVisitante';
+              const fielderLineupPlayer = updatedPartido[defensiveLineupKey].find(p => p.jugadorId === errorPlayerInfo.codigo);
+              const edLog: RegistroJuego = { 
+                id: generateUUID(), timestamp: Date.now(), inning: updatedPartido.gameStatus.actualInningNumber,
+                halfInning: updatedPartido.gameStatus.currentHalfInning, 
+                bateadorId: fielderLineupPlayer ? fielderLineupPlayer.id : String(errorPlayerInfo.codigo), 
+                bateadorNombre: errorPlayerInfo.nombre,
+                bateadorPosicion: fielderLineupPlayer ? fielderLineupPlayer.posicion : errorPlayerInfo.posicionPreferida,
+                pitcherResponsableId: pitcher ? pitcher.id : null, 
+                pitcherResponsableNombre: pitcher ? pitcher.nombreJugador : null,
+                equipoBateadorNombre: updatedPartido.gameStatus.currentHalfInning === 'Top' ? updatedPartido.nombreEquipoLocal : updatedPartido.nombreEquipoVisitante, 
+                jugadaId: 'ED',
+                descripcion: getOriginalJugadaDescription('ED', "Error Defensivo"), 
+                outsPrev: outsBeforePlayForLog + outsGeneratedThisPlay, 
+                outsAfter: outsBeforePlayForLog + outsGeneratedThisPlay,
+                basesPrevState: newBasesState.map(p => p ? p.lineupPlayerId : 'null').join('-'), 
+                basesAfterState: newBasesState.map(p => p ? p.lineupPlayerId : 'null').join('-'),
+                runScored: 0, rbi: 0,
+                fechaDelPartido: updatedPartido.fecha,
+                formatoDelPartidoDesc: formatoDesc,
+                numeroDelPartido: updatedPartido.numeroJuego,
+                ordenDelBateador: fielderLineupPlayer ? fielderLineupPlayer.ordenBate : 0, 
+              };
+              updatedPartido.registrosJuego.push(edLog);
+              if (fielderLineupPlayer) {
+                  const playInCellForFielder: PlayInInningCell = {playInstanceId: edLog.id, jugadaId: 'ED', descripcion: edLog.descripcion, playDisplayValue: 'ED'};
+                  const updatedFielderInnings = { ...fielderLineupPlayer.innings };
+                  if (!updatedFielderInnings[edLog.inning]) updatedFielderInnings[edLog.inning] = [];
+                  updatedFielderInnings[edLog.inning].push(playInCellForFielder);
+                  updatedPartido[defensiveLineupKey] = updatedPartido[defensiveLineupKey].map(p => p.id === fielderLineupPlayer.id ? {...fielderLineupPlayer, innings: updatedFielderInnings} : p);
+              }
+          }
+      }
+      
+      const { updatedGameStatus, gameShouldEnd } = _calculateOutsUpdate(
+        { ...updatedPartido.gameStatus, bases: newBasesState, outs: outsBeforePlayForLog },
+        outsGeneratedThisPlay, updatedPartido.maxInnings,
+        updatedPartido.lineupVisitante, updatedPartido.lineupLocal,
+        updatedPartido.visitanteStats.totalRuns, updatedPartido.localStats.totalRuns
+      );
+      updatedPartido.gameStatus = updatedGameStatus;
+      updatedPartido.gameStatus.lastPlayContext = { batterLineupPlayerId: batterAtPlay.id, jugada: jugadasDB.find(j => j.jugada === 'E') || null, timestamp: Date.now(), previousBatterLineupPlayerId: prev.gameStatus.lastPlayContext?.batterLineupPlayerId !== batterAtPlay.id ? prev.gameStatus.lastPlayContext?.batterLineupPlayerId : prev.gameStatus.lastPlayContext?.previousBatterLineupPlayerId};
+      
+      if (outsGeneratedThisPlay === 0 && updatedPartido.gameStatus.outs === outsBeforePlayForLog) {
+         updatedPartido.gameStatus.currentBatterLineupPlayerId = findNextBatterInLineup(updatedPartido[batterLineupKey], batterAtPlay.id);
+      }
+
+
+      if (gameShouldEnd && gamePhase === 'scoring') {
+          setGamePhase('ended');
+      }
+      return updatedPartido;
+    });
+    setRunnerAdvancementAfterErrorModalState(prev => ({ ...prev, isOpen: false, batterWhoReachedOnError: null, runnersOnBaseAtTimeOfError: [] }));
+    setCurrentPlayerForPlay(null); 
+  };
+
   const handleConfirmRbiAssignment = (rbiCreditedToPlayerId: string | null) => {
     if (!currentPartido || !assignRbiModalState.scoringPlayerInfo) return;
     const { scoringPlayerInfo } = assignRbiModalState; 
@@ -1938,82 +2135,489 @@ export const PartidosPage: React.FC = () => {
         updatedPartido[lineupKey] = updatedPartido[lineupKey].map(p => {
             if (p.id === runnerInfo.lineupPlayerId) {
                 const updatedInnings = { ...p.innings };
-                if (!updatedInnings[outLog.inning]) updatedInnings[outLog.inning] = [];
-                updatedInnings[outLog.inning].push({
+                const inningForCell = outLog.inning; 
+                if (!updatedInnings[inningForCell]) updatedInnings[inningForCell] = [];
+                updatedInnings[inningForCell].push({
                     playInstanceId: outLog.id,
                     jugadaId: outLog.jugadaId,
                     descripcion: outLog.descripcion,
-                    playDisplayValue: jugadaIdForLog,
+                    playDisplayValue: outLog.jugadaId === 'CS' ? 'CS' : 'Out', 
                 });
                 return { ...p, innings: updatedInnings };
             }
             return p;
         });
-        
         return updatedPartido;
     });
-
     setIsRunnerOutSpecificReasonModalOpen(false);
     setManagingRunner(null);
   };
 
-  const handleUndoLastPlay = () => {
-    if (partidoHistoryStack.length > 0) {
-      const [lastState, ...restOfHistory] = partidoHistoryStack;
-      setCurrentPartido(lastState);
-      setPartidoHistoryStack(restOfHistory);
-    } else {
-      alert("No hay más acciones para deshacer.");
-    }
-  };
 
-  const requestSaveAndEndGame = () => {
-    setConfirmActionModalProps({
-      title: 'Finalizar y Guardar Juego',
-      message: '¿Está seguro de que desea finalizar el partido y guardarlo en el historial? Ya no podrá anotar más jugadas.',
-      onConfirm: handleSaveAndEndGame,
-      confirmButtonText: 'Finalizar y Guardar',
-      confirmButtonVariant: 'success',
+  const handleConfirmRunnerAdvancementsFromHitModal = (
+    advancements: { [key: string]: number }, 
+    batter: LineupPlayer,
+    hitType: 'H1' | 'H2' | 'H3' | 'HR', 
+    batterFinalDestBase: 1 | 2 | 3 | 4 
+  ) => {
+    saveToHistory(currentPartido!);
+    updateCurrentPartidoAndHistory(prev => {
+        if (!prev) return prev;
+        let updatedPartido = { ...prev };
+        let newBasesState: [PlayerOnBase | null, PlayerOnBase | null, PlayerOnBase | null] = [null, null, null];
+        let runsScoredThisPlay = 0; 
+        let rbisForBatterThisPlay = 0;
+        let outsThisPlay = 0;
+
+        let tempBatterStats = { ...batter.stats }; 
+        tempBatterStats.atBats +=1;
+        tempBatterStats.plateAppearances +=1;
+        tempBatterStats.hits +=1;
+        if (hitType === 'H1') tempBatterStats.singles +=1;
+        else if (hitType === 'H2') tempBatterStats.doubles +=1;
+        else if (hitType === 'H3') tempBatterStats.triples +=1;
+        else if (hitType === 'HR') tempBatterStats.homeRuns +=1; 
+        
+        const teamAtBat = updatedPartido.gameStatus.currentHalfInning === 'Top' ? 'visitante' : 'local';
+        const teamStatsKey = teamAtBat === 'visitante' ? 'visitanteStats' : 'localStats';
+        updatedPartido[teamStatsKey].hits += 1;
+        if (hitType === 'HR') updatedPartido[teamStatsKey].homeRuns +=1;
+
+        const batterAsPlayerOnBase: PlayerOnBase = {
+            lineupPlayerId: batter.id,
+            jugadorId: batter.jugadorId,
+            nombreJugador: batter.nombreJugador,
+            reachedOnJugadaId: hitType
+        };
+
+        const runJugadaDef = jugadasDB.find(j => j.jugada === 'R');
+        const rbiJugadaDef = jugadasDB.find(j => j.jugada === 'RBI');
+        const outRunnerOnHitJugadaDef = jugadasDB.find(j => j.jugada === 'OUT_ROH') || { jugada: 'OUT_ROH', descripcion: 'Out Corredor en Hit', category: PlayCategory.OUT, isDefault: false, isActive: true};
+        const pitcher = getCurrentOpposingPitcher(updatedPartido);
+        const formatoDesc = formatos.find(f => f.codigo === updatedPartido.formatoJuegoId)?.descripcion || 'N/A';
+        const initialBasesForLog = [...prev.gameStatus.bases];
+        const outsBeforePlayForLog = prev.gameStatus.outs;
+
+
+        const runnersToPlaceOnBases: { player: PlayerOnBase, targetBase: number }[] = [];
+        runnerAdvancementAfterHitModalState.runnersOnBase.forEach(runnerInfo => {
+            const targetBase = advancements[runnerInfo.lineupPlayerId]; 
+            if (targetBase === 0) { 
+                outsThisPlay++;
+                const outLog: RegistroJuego = {
+                    id: generateUUID(), timestamp: Date.now(), inning: updatedPartido.gameStatus.actualInningNumber,
+                    halfInning: updatedPartido.gameStatus.currentHalfInning, bateadorId: runnerInfo.lineupPlayerId, 
+                    bateadorNombre: runnerInfo.nombreJugador, bateadorPosicion: (teamAtBat === 'visitante' ? updatedPartido.lineupVisitante : updatedPartido.lineupLocal).find(p=>p.id===runnerInfo.lineupPlayerId)?.posicion || '',
+                    pitcherResponsableId: pitcher ? pitcher.id : null, pitcherResponsableNombre: pitcher ? pitcher.nombreJugador : null,
+                    equipoBateadorNombre: teamAtBat === 'visitante' ? updatedPartido.nombreEquipoVisitante : updatedPartido.nombreEquipoLocal,
+                    jugadaId: outRunnerOnHitJugadaDef.jugada, descripcion: getOriginalJugadaDescription(outRunnerOnHitJugadaDef.jugada, outRunnerOnHitJugadaDef.descripcion),
+                    outsPrev: outsBeforePlayForLog + outsThisPlay -1, 
+                    outsAfter: outsBeforePlayForLog + outsThisPlay,   
+                    basesPrevState: initialBasesForLog.map(p => p ? p.lineupPlayerId : 'null').join('-'), 
+                    basesAfterState: initialBasesForLog.map(p => p && p.lineupPlayerId !== runnerInfo.lineupPlayerId ? p.lineupPlayerId : 'null').join('-'), 
+                    runScored: 0, rbi: 0,
+                    fechaDelPartido: updatedPartido.fecha, formatoDelPartidoDesc: formatoDesc, numeroDelPartido: updatedPartido.numeroJuego, ordenDelBateador: (teamAtBat === 'visitante' ? updatedPartido.lineupVisitante : updatedPartido.lineupLocal).find(p=>p.id===runnerInfo.lineupPlayerId)?.ordenBate || 0,
+                };
+                updatedPartido.registrosJuego.push(outLog);
+                const runnerLineupKeyForOut = teamAtBat === 'visitante' ? 'lineupVisitante' : 'lineupLocal';
+                updatedPartido[runnerLineupKeyForOut] = updatedPartido[runnerLineupKeyForOut].map(plr => {
+                  if (plr.id === runnerInfo.lineupPlayerId) {
+                    const updatedInnings = { ...plr.innings };
+                    if (!updatedInnings[outLog.inning]) updatedInnings[outLog.inning] = [];
+                    updatedInnings[outLog.inning].push({
+                      playInstanceId: outLog.id, jugadaId: outLog.jugadaId, descripcion: outLog.descripcion, playDisplayValue: 'Out'
+                    });
+                    return { ...plr, innings: updatedInnings };
+                  }
+                  return plr;
+                });
+
+            } else if (targetBase === 4) { 
+                _applySingleRunScoringLogic(updatedPartido, runnerInfo, batter.id); 
+                runsScoredThisPlay++;
+                rbisForBatterThisPlay++;
+
+                if (runJugadaDef) { 
+                    const runLog = {
+                        id: generateUUID(), timestamp: Date.now(), inning: updatedPartido.gameStatus.actualInningNumber,
+                        halfInning: updatedPartido.gameStatus.currentHalfInning, bateadorId: runnerInfo.lineupPlayerId,
+                        bateadorNombre: runnerInfo.nombreJugador, bateadorPosicion: (teamAtBat === 'visitante' ? updatedPartido.lineupVisitante : updatedPartido.lineupLocal).find(p=>p.id===runnerInfo.lineupPlayerId)?.posicion || '',
+                        pitcherResponsableId: pitcher ? pitcher.id : null, pitcherResponsableNombre: pitcher ? pitcher.nombreJugador : null,
+                        equipoBateadorNombre: teamAtBat === 'visitante' ? updatedPartido.nombreEquipoVisitante : updatedPartido.nombreEquipoLocal,
+                        jugadaId: 'R', descripcion: getOriginalJugadaDescription('R', runJugadaDef.descripcion), outsPrev: outsBeforePlayForLog + outsThisPlay,
+                        outsAfter: outsBeforePlayForLog + outsThisPlay, basesPrevState: initialBasesForLog.map(p => p ? p.lineupPlayerId : 'null').join('-'),
+                        basesAfterState: newBasesState.map(p => p ? p.lineupPlayerId : 'null').join('-'), 
+                        runScored: 1, rbi: 0,
+                        fechaDelPartido: updatedPartido.fecha, formatoDelPartidoDesc: formatoDesc, numeroDelPartido: updatedPartido.numeroJuego, ordenDelBateador: (teamAtBat === 'visitante' ? updatedPartido.lineupVisitante : updatedPartido.lineupLocal).find(p=>p.id===runnerInfo.lineupPlayerId)?.ordenBate || 0,
+                    };
+                    updatedPartido.registrosJuego.push(runLog);
+                    const runnerLineupKeyForRun = teamAtBat === 'visitante' ? 'lineupVisitante' : 'lineupLocal';
+                    updatedPartido[runnerLineupKeyForRun] = updatedPartido[runnerLineupKeyForRun].map(plr => {
+                        if (plr.id === runnerInfo.lineupPlayerId) {
+                            const updatedInnings = { ...plr.innings };
+                            if (!updatedInnings[runLog.inning]) updatedInnings[runLog.inning] = [];
+                            updatedInnings[runLog.inning].push({
+                                playInstanceId: runLog.id, jugadaId: runLog.jugadaId, descripcion: runLog.descripcion, playDisplayValue: 'R'
+                            });
+                            return { ...plr, innings: updatedInnings };
+                        }
+                        return plr;
+                    });
+                }
+                if (rbiJugadaDef) { 
+                     updatedPartido.registrosJuego.push({
+                        id: generateUUID(), timestamp: Date.now(), inning: updatedPartido.gameStatus.actualInningNumber,
+                        halfInning: updatedPartido.gameStatus.currentHalfInning, bateadorId: batter.id,
+                        bateadorNombre: batter.nombreJugador, bateadorPosicion: batter.posicion,
+                        pitcherResponsableId: pitcher ? pitcher.id : null, pitcherResponsableNombre: pitcher ? pitcher.nombreJugador : null,
+                        equipoBateadorNombre: teamAtBat === 'visitante' ? updatedPartido.nombreEquipoVisitante : updatedPartido.nombreEquipoLocal,
+                        jugadaId: 'RBI', descripcion: getOriginalJugadaDescription('RBI', rbiJugadaDef.descripcion), outsPrev: outsBeforePlayForLog + outsThisPlay,
+                        outsAfter: outsBeforePlayForLog + outsThisPlay, basesPrevState: initialBasesForLog.map(p => p ? p.lineupPlayerId : 'null').join('-'),
+                        basesAfterState: newBasesState.map(p => p ? p.lineupPlayerId : 'null').join('-'), 
+                        runScored: 0, rbi: 1,
+                        fechaDelPartido: updatedPartido.fecha, formatoDelPartidoDesc: formatoDesc, numeroDelPartido: updatedPartido.numeroJuego, ordenDelBateador: batter.ordenBate,
+                    });
+                }
+            } else if (targetBase >= 1 && targetBase <= 3) {
+                runnersToPlaceOnBases.push({ player: runnerInfo, targetBase });
+            }
+        });
+        
+        if (batterFinalDestBase === 4) { 
+            _applySingleRunScoringLogic(updatedPartido, batter, batter.id); 
+            runsScoredThisPlay++;
+            rbisForBatterThisPlay++;
+            if (runJugadaDef) { 
+                 const batterRunLog = {
+                    id: generateUUID(), timestamp: Date.now(), inning: updatedPartido.gameStatus.actualInningNumber,
+                    halfInning: updatedPartido.gameStatus.currentHalfInning, bateadorId: batter.id,
+                    bateadorNombre: batter.nombreJugador, bateadorPosicion: batter.posicion,
+                    pitcherResponsableId: pitcher ? pitcher.id : null, pitcherResponsableNombre: pitcher ? pitcher.nombreJugador : null,
+                    equipoBateadorNombre: teamAtBat === 'visitante' ? updatedPartido.nombreEquipoVisitante : updatedPartido.nombreEquipoLocal,
+                    jugadaId: 'R', descripcion: getOriginalJugadaDescription('R', runJugadaDef.descripcion), outsPrev: outsBeforePlayForLog + outsThisPlay,
+                    outsAfter: outsBeforePlayForLog + outsThisPlay, basesPrevState: initialBasesForLog.map(p => p ? p.lineupPlayerId : 'null').join('-'),
+                    basesAfterState: newBasesState.map(p => p ? p.lineupPlayerId : 'null').join('-'), 
+                    runScored: 1, rbi: 0,
+                    fechaDelPartido: updatedPartido.fecha, formatoDelPartidoDesc: formatoDesc, numeroDelPartido: updatedPartido.numeroJuego, ordenDelBateador: batter.ordenBate,
+                };
+                updatedPartido.registrosJuego.push(batterRunLog);
+                const batterLineupKeyForRun = teamAtBat === 'visitante' ? 'lineupVisitante' : 'lineupLocal';
+                updatedPartido[batterLineupKeyForRun] = updatedPartido[batterLineupKeyForRun].map(plr => {
+                    if (plr.id === batter.id) {
+                        const updatedInnings = { ...plr.innings };
+                        if (!updatedInnings[batterRunLog.inning]) updatedInnings[batterRunLog.inning] = [];
+                        updatedInnings[batterRunLog.inning].push({
+                           playInstanceId: batterRunLog.id, jugadaId: batterRunLog.jugadaId, descripcion: batterRunLog.descripcion, playDisplayValue: 'R'
+                        });
+                        return { ...plr, innings: updatedInnings };
+                    }
+                    return plr;
+                });
+            }
+            if (rbiJugadaDef) { 
+                updatedPartido.registrosJuego.push({
+                    id: generateUUID(), timestamp: Date.now(), inning: updatedPartido.gameStatus.actualInningNumber,
+                    halfInning: updatedPartido.gameStatus.currentHalfInning, bateadorId: batter.id,
+                    bateadorNombre: batter.nombreJugador, bateadorPosicion: batter.posicion,
+                    pitcherResponsableId: pitcher ? pitcher.id : null, pitcherResponsableNombre: pitcher ? pitcher.nombreJugador : null,
+                    equipoBateadorNombre: teamAtBat === 'visitante' ? updatedPartido.nombreEquipoVisitante : updatedPartido.nombreEquipoLocal,
+                    jugadaId: 'RBI', descripcion: getOriginalJugadaDescription('RBI', rbiJugadaDef.descripcion), outsPrev: outsBeforePlayForLog + outsThisPlay,
+                    outsAfter: outsBeforePlayForLog + outsThisPlay, basesPrevState: initialBasesForLog.map(p => p ? p.lineupPlayerId : 'null').join('-'),
+                    basesAfterState: newBasesState.map(p => p ? p.lineupPlayerId : 'null').join('-'), 
+                    runScored: 0, rbi: 1,
+                    fechaDelPartido: updatedPartido.fecha, formatoDelPartidoDesc: formatoDesc, numeroDelPartido: updatedPartido.numeroJuego, ordenDelBateador: batter.ordenBate,
+                });
+            }
+        } else if (batterFinalDestBase >=1 && batterFinalDestBase <=3) {
+             runnersToPlaceOnBases.push({ player: batterAsPlayerOnBase, targetBase: batterFinalDestBase });
+        }
+        
+        runnersToPlaceOnBases.sort((a, b) => b.targetBase - a.targetBase);
+        runnersToPlaceOnBases.forEach(item => {
+            if (newBasesState[item.targetBase - 1] === null) {
+                newBasesState[item.targetBase - 1] = item.player;
+            } else {
+                console.warn(`Collision on base ${item.targetBase} while placing ${item.player.nombreJugador}. Previous: ${newBasesState[item.targetBase-1]?.nombreJugador}`);
+            }
+        });
+        
+        const batterLineupKey = teamAtBat === 'visitante' ? 'lineupVisitante' : 'lineupLocal'; 
+        updatedPartido[batterLineupKey] = updatedPartido[batterLineupKey].map(p => {
+            if (p.id === batter.id) {
+                return {...p, stats: { ...p.stats, ...tempBatterStats, rbi: p.stats.rbi + rbisForBatterThisPlay } };
+            }
+            return p;
+        });
+
+        const hitJugadaDefResolved = jugadasDB.find(j => j.jugada === hitType)!;
+        const mainHitRegistro: RegistroJuego = {
+            id: generateUUID(), timestamp: Date.now(), inning: updatedPartido.gameStatus.actualInningNumber,
+            halfInning: updatedPartido.gameStatus.currentHalfInning, bateadorId: batter.id,
+            bateadorNombre: batter.nombreJugador, bateadorPosicion: batter.posicion,
+            pitcherResponsableId: pitcher ? pitcher.id : null,
+            pitcherResponsableNombre: pitcher ? pitcher.nombreJugador : null,
+            equipoBateadorNombre: teamAtBat === 'visitante' ? updatedPartido.nombreEquipoVisitante : updatedPartido.nombreEquipoLocal,
+            jugadaId: hitType, descripcion: getOriginalJugadaDescription(hitType, hitJugadaDefResolved.descripcion), 
+            outsPrev: outsBeforePlayForLog,
+            outsAfter: outsBeforePlayForLog + outsThisPlay, 
+            basesPrevState: initialBasesForLog.map(p => p ? p.lineupPlayerId : 'null').join('-'),
+            basesAfterState: newBasesState.map(p => p ? p.lineupPlayerId : 'null').join('-'), 
+            runScored: runsScoredThisPlay, rbi: rbisForBatterThisPlay, 
+            fechaDelPartido: updatedPartido.fecha, formatoDelPartidoDesc: formatoDesc, numeroDelPartido: updatedPartido.numeroJuego, ordenDelBateador: batter.ordenBate,
+        };
+        const playInInningCellToAdd: PlayInInningCell = {
+            playInstanceId: mainHitRegistro.id, jugadaId: mainHitRegistro.jugadaId, descripcion: mainHitRegistro.descripcion,
+            playDisplayValue: `${mainHitRegistro.jugadaId}${mainHitRegistro.rbi > 0 ? ` (${mainHitRegistro.rbi} RBI)` : ''}`
+        };
+        updatedPartido[batterLineupKey] = updatedPartido[batterLineupKey].map(p => {
+            if (p.id === batter.id) {
+                const updatedInnings = { ...p.innings };
+                if (!updatedInnings[mainHitRegistro.inning]) updatedInnings[mainHitRegistro.inning] = [];
+                updatedInnings[mainHitRegistro.inning].push(playInInningCellToAdd);
+                return {...p, innings: updatedInnings };
+            }
+            return p;
+        });
+        updatedPartido.registrosJuego.push(mainHitRegistro); 
+
+        updatedPartido.gameStatus = {
+            ...updatedPartido.gameStatus,
+            bases: newBasesState,
+            lastPlayContext: { batterLineupPlayerId: batter.id, jugada: hitJugadaDefResolved, timestamp: Date.now(), previousBatterLineupPlayerId: prev.gameStatus.lastPlayContext?.batterLineupPlayerId !== batter.id ? prev.gameStatus.lastPlayContext?.batterLineupPlayerId : prev.gameStatus.lastPlayContext?.previousBatterLineupPlayerId },
+        };
+        
+        if (outsThisPlay > 0) {
+            const { updatedGameStatus: statusAfterOuts, gameShouldEnd } = _calculateOutsUpdate(
+                updatedPartido.gameStatus, 
+                outsThisPlay, 
+                updatedPartido.maxInnings,
+                updatedPartido.lineupVisitante, 
+                updatedPartido.lineupLocal,
+                updatedPartido.visitanteStats.totalRuns, 
+                updatedPartido.localStats.totalRuns
+            );
+            updatedPartido.gameStatus = statusAfterOuts;
+            if (gameShouldEnd && gamePhase === 'scoring') {
+                setGamePhase('ended');
+            }
+        } else { 
+             updatedPartido.gameStatus.currentBatterLineupPlayerId = findNextBatterInLineup(updatedPartido[batterLineupKey], batter.id);
+        }
+        
+        return updatedPartido;
     });
-    setIsConfirmActionModalOpen(true);
+    setRunnerAdvancementAfterHitModalState({ isOpen: false, batter: null, hitType: null, batterReachedBase: 1, runnersOnBase: [], advancements: {} });
   };
 
-  const handleSaveAndEndGame = () => {
-    if (!currentPartido) return;
-    const finalGameData: JuegoGuardado = {
-      ...currentPartido,
-      idJuego: currentPartido.idJuego || generateUUID(),
-      timestampGuardado: Date.now(),
-    };
-    setHistorial(prevHistorial => [...prevHistorial.filter(j => j.idJuego !== finalGameData.idJuego), finalGameData]);
-    setPartidoEnCurso(null);
-    setPartidoHistoryStack([]);
-    navigate('/historial');
-  };
+
+  const handleConfirmRunnerAdvancementsFromSacrificeModal = (
+    advancements: { [key: string]: number },
+    batter: LineupPlayer,
+    sacrificeType: 'SF' | 'SH',
+    initialOutsAtStartOfSacPlay: number 
+  ) => {
+    saveToHistory(currentPartido!);
+    updateCurrentPartidoAndHistory(prev => {
+      if (!prev) return prev;
+      let updatedPartido = { ...prev };
+      let newBasesState: [PlayerOnBase | null, PlayerOnBase | null, PlayerOnBase | null] = [...updatedPartido.gameStatus.bases]; 
+      let runsScoredByOtherRunners = 0;
+      let rbisForBatterByOtherRunners = 0; 
+      let additionalOutsFromRunners = 0;
   
-  const handleArchiveGame = () => {
-    if (!currentPartido) return;
-    const gameToSave: JuegoGuardado = {
-        ...currentPartido,
-        idJuego: currentPartido.idJuego || generateUUID(),
-        timestampGuardado: Date.now(),
-    };
-    setHistorial(prev => [...prev.filter(j => j.idJuego !== gameToSave.idJuego), gameToSave]);
-    alert("Partido guardado en el historial. Puede continuar jugando.");
-    setIsConfirmActionModalOpen(false); // Close any open confirmation modal
+      const teamAtBat = updatedPartido.gameStatus.currentHalfInning === 'Top' ? 'visitante' : 'local';
+      const pitcher = getCurrentOpposingPitcher(updatedPartido);
+      const formatoDesc = formatos.find(f => f.codigo === updatedPartido.formatoJuegoId)?.descripcion || 'N/A';
+      const outRunnerOnSacJugadaDef = jugadasDB.find(j => j.jugada === 'OUT_ROS');
+      const runJugadaDef = jugadasDB.find(j => j.jugada === 'R');
+      const rbiJugadaDef = jugadasDB.find(j => j.jugada === 'RBI'); 
+      
+      runnerAdvancementAfterSacrificeModalState.runnersOnBase.forEach(runnerInfo => {
+        const targetBase = advancements[runnerInfo.lineupPlayerId];
+        const runnerLineupPlayer = (teamAtBat === 'visitante' ? updatedPartido.lineupVisitante : updatedPartido.lineupLocal).find(p => p.id === runnerInfo.lineupPlayerId);
+        
+        const originalBaseIndex = newBasesState.findIndex(b => b?.lineupPlayerId === runnerInfo.lineupPlayerId);
+        if (originalBaseIndex !== -1) {
+            newBasesState[originalBaseIndex] = null;
+        }
+
+        if (targetBase === 0) { 
+          additionalOutsFromRunners++;
+          if (outRunnerOnSacJugadaDef && runnerLineupPlayer) {
+            const outLog: RegistroJuego = {
+                id: generateUUID(), timestamp: Date.now(), inning: updatedPartido.gameStatus.actualInningNumber,
+                halfInning: updatedPartido.gameStatus.currentHalfInning, bateadorId: runnerInfo.lineupPlayerId,
+                bateadorNombre: runnerInfo.nombreJugador, bateadorPosicion: runnerLineupPlayer.posicion,
+                pitcherResponsableId: pitcher ? pitcher.id : null, pitcherResponsableNombre: pitcher ? pitcher.nombreJugador : null,
+                equipoBateadorNombre: teamAtBat === 'visitante' ? updatedPartido.nombreEquipoVisitante : updatedPartido.nombreEquipoLocal,
+                jugadaId: 'OUT_ROS', descripcion: getOriginalJugadaDescription('OUT_ROS', 'Out Corredor en Sacrificio'),
+                outsPrev: initialOutsAtStartOfSacPlay + 1 + additionalOutsFromRunners -1, 
+                outsAfter: initialOutsAtStartOfSacPlay + 1 + additionalOutsFromRunners,
+                basesPrevState: runnerAdvancementAfterSacrificeModalState.runnersOnBase.map(rnr => rnr ? rnr.lineupPlayerId : 'null').join('-'), 
+                basesAfterState: "Pending", runScored: 0, rbi: 0,
+                fechaDelPartido: updatedPartido.fecha, formatoDelPartidoDesc: formatoDesc, numeroDelPartido: updatedPartido.numeroJuego, ordenDelBateador: runnerLineupPlayer.ordenBate,
+            };
+            updatedPartido.registrosJuego.push(outLog);
+            const lineupKey = teamAtBat === 'visitante' ? 'lineupVisitante' : 'lineupLocal';
+            updatedPartido[lineupKey] = updatedPartido[lineupKey].map(p => {
+                if (p.id === runnerInfo.lineupPlayerId) {
+                    const updatedInnings = { ...p.innings };
+                    if (!updatedInnings[outLog.inning]) updatedInnings[outLog.inning] = [];
+                    updatedInnings[outLog.inning].push({ playInstanceId: outLog.id, jugadaId: outLog.jugadaId, descripcion: outLog.descripcion, playDisplayValue: 'Out' });
+                    return { ...p, innings: updatedInnings };
+                }
+                return p;
+            });
+          }
+        } else if (targetBase === 4) { 
+          _applySingleRunScoringLogic(updatedPartido, runnerInfo, batter.id); 
+          runsScoredByOtherRunners++;
+          rbisForBatterByOtherRunners++; 
+           if (runJugadaDef && runnerLineupPlayer) {
+            const runLogEntry: RegistroJuego = {
+                id: generateUUID(), timestamp: Date.now(), inning: updatedPartido.gameStatus.actualInningNumber,
+                halfInning: updatedPartido.gameStatus.currentHalfInning, bateadorId: runnerInfo.lineupPlayerId,
+                bateadorNombre: runnerInfo.nombreJugador, bateadorPosicion: runnerLineupPlayer.posicion,
+                pitcherResponsableId: pitcher ? pitcher.id : null, pitcherResponsableNombre: pitcher ? pitcher.nombreJugador : null,
+                equipoBateadorNombre: teamAtBat === 'visitante' ? updatedPartido.nombreEquipoVisitante : updatedPartido.nombreEquipoLocal,
+                jugadaId: 'R', descripcion: getOriginalJugadaDescription('R', 'Carrera Anotada'),
+                outsPrev: initialOutsAtStartOfSacPlay + 1 + additionalOutsFromRunners, 
+                outsAfter: initialOutsAtStartOfSacPlay + 1 + additionalOutsFromRunners,
+                basesPrevState: runnerAdvancementAfterSacrificeModalState.runnersOnBase.map(rnr => rnr ? rnr.lineupPlayerId : 'null').join('-'), 
+                basesAfterState: "Pending", runScored: 1, rbi: 0,
+                fechaDelPartido: updatedPartido.fecha, formatoDelPartidoDesc: formatoDesc, numeroDelPartido: updatedPartido.numeroJuego, ordenDelBateador: runnerLineupPlayer.ordenBate,
+             };
+             updatedPartido.registrosJuego.push(runLogEntry);
+             if (rbiJugadaDef) { 
+                updatedPartido.registrosJuego.push({
+                    ...runLogEntry, id:generateUUID(), bateadorId: batter.id, bateadorNombre: batter.nombreJugador, bateadorPosicion: batter.posicion,
+                    jugadaId: 'RBI', descripcion: getOriginalJugadaDescription('RBI'), runScored:0, rbi:1, ordenDelBateador: batter.ordenBate
+                });
+             }
+            const lineupKey = teamAtBat === 'visitante' ? 'lineupVisitante' : 'lineupLocal';
+            updatedPartido[lineupKey] = updatedPartido[lineupKey].map(p => {
+                if (p.id === runnerInfo.lineupPlayerId) {
+                    const updatedInnings = { ...p.innings };
+                    if (!updatedInnings[updatedPartido.gameStatus.actualInningNumber]) updatedInnings[updatedPartido.gameStatus.actualInningNumber] = [];
+                    updatedInnings[updatedPartido.gameStatus.actualInningNumber].push({ playInstanceId: runLogEntry.id, jugadaId: 'R', descripcion: 'Carrera Anotada', playDisplayValue: 'R' });
+                    return { ...p, innings: updatedInnings };
+                }
+                return p;
+            });
+           }
+        } else if (targetBase >= 1 && targetBase <= 3) { 
+          if (newBasesState[targetBase - 1] === null) {
+            newBasesState[targetBase - 1] = runnerInfo;
+          } else {
+            console.warn(`Collision on base ${targetBase} for runner ${runnerInfo.nombreJugador} during sacrifice advancement.`);
+          }
+        }
+      });
+  
+      const batterLineupKey = teamAtBat === 'visitante' ? 'lineupVisitante' : 'lineupLocal';
+      updatedPartido[batterLineupKey] = updatedPartido[batterLineupKey].map(p => {
+          if (p.id === batter.id) {
+              return { ...p, stats: { ...p.stats, rbi: p.stats.rbi + rbisForBatterByOtherRunners } };
+          }
+          return p;
+      });
+
+      updatedPartido.gameStatus.bases = newBasesState;
+      const totalOutsAfterPlay = initialOutsAtStartOfSacPlay + 1 + additionalOutsFromRunners;
+      
+      updatedPartido.registrosJuego = updatedPartido.registrosJuego.map(reg => {
+        if (reg.basesAfterState === "Pending") {
+            return { ...reg, basesAfterState: newBasesState.map(p => p ? p.lineupPlayerId : 'null').join('-') };
+        }
+        return reg;
+      });
+
+      const mainSacLogIndex = updatedPartido.registrosJuego.findIndex(r => r.bateadorId === batter.id && (r.jugadaId === 'SF' || r.jugadaId === 'SH') && r.outsPrev === initialOutsAtStartOfSacPlay);
+      if (mainSacLogIndex !== -1) {
+          updatedPartido.registrosJuego[mainSacLogIndex].rbi += rbisForBatterByOtherRunners; 
+          updatedPartido.registrosJuego[mainSacLogIndex].runScored += runsScoredByOtherRunners; 
+          updatedPartido.registrosJuego[mainSacLogIndex].outsAfter = totalOutsAfterPlay; 
+          updatedPartido.registrosJuego[mainSacLogIndex].basesAfterState = newBasesState.map(p => p ? p.lineupPlayerId : 'null').join('-');
+
+          const mainSacLog = updatedPartido.registrosJuego[mainSacLogIndex];
+          const batterTeamLineup = teamAtBat === 'visitante' ? updatedPartido.lineupVisitante : updatedPartido.lineupLocal;
+          const batterPlayerIndex = batterTeamLineup.findIndex(p=>p.id === batter.id);
+          if(batterPlayerIndex !== -1){
+            const batterPlayerToUpdate = batterTeamLineup[batterPlayerIndex];
+            const inningCells = batterPlayerToUpdate.innings[mainSacLog.inning] || [];
+            const cellIndex = inningCells.findIndex(cell => cell.playInstanceId === mainSacLog.id);
+            if(cellIndex !== -1){
+                inningCells[cellIndex].playDisplayValue = `${mainSacLog.jugadaId}${mainSacLog.rbi > 0 ? ` (${mainSacLog.rbi} RBI)` : ''}`;
+            }
+          }
+      }
+      
+      const { updatedGameStatus, gameShouldEnd } = _calculateOutsUpdate(
+        { ...updatedPartido.gameStatus, outs: initialOutsAtStartOfSacPlay },
+        1 + additionalOutsFromRunners, 
+        updatedPartido.maxInnings,
+        updatedPartido.lineupVisitante, updatedPartido.lineupLocal,
+        updatedPartido.visitanteStats.totalRuns, updatedPartido.localStats.totalRuns
+      );
+      updatedPartido.gameStatus = updatedGameStatus;
+      if (gameShouldEnd && gamePhase === 'scoring') {
+        setGamePhase('ended');
+      }
+  
+      return updatedPartido;
+    });
+    setRunnerAdvancementAfterSacrificeModalState({ isOpen: false, batter: null, sacrificeType: null, runnersOnBase: [], advancements: {}, initialOuts: 0 });
   };
 
-  const requestClearGame = () => {
-     setConfirmActionModalProps({
-        title: 'Borrar Partido Actual',
-        message: '¿Está seguro de que desea borrar todos los datos del partido actual? Esta acción no se puede deshacer.',
+
+  const requestDeleteRegistro = (registroToDelete: RegistroJuego) => {
+    setConfirmActionModalProps({
+        title: 'Confirmar Eliminación de Registro',
+        message: `¿Está seguro de que desea eliminar la jugada "${registroToDelete.descripcion}" del log? Esta acción no recalculará estadísticas. Use 'Retroceder Anotación' para un undo completo.`,
         onConfirm: () => {
-            setPartidoEnCurso(null);
-            setPartidoHistoryStack([]);
-            navigate('/configurar-partido');
+            if (!currentPartido) return;
+            updateCurrentPartidoAndHistory(prev => {
+              if(!prev) return prev;
+              const updatedRegistros = prev.registrosJuego.filter(r => r.id !== registroToDelete.id);
+              
+              let playerLineupToUpdateKey: 'lineupVisitante' | 'lineupLocal' | null = null;
+              if (prev.lineupVisitante.some(p => p.id === registroToDelete.bateadorId)) {
+                playerLineupToUpdateKey = 'lineupVisitante';
+              } else if (prev.lineupLocal.some(p => p.id === registroToDelete.bateadorId)) {
+                playerLineupToUpdateKey = 'lineupLocal';
+              }
+
+              let updatedLineupForPlayer: LineupPlayer[] | undefined = playerLineupToUpdateKey ? [...prev[playerLineupToUpdateKey]] : undefined;
+
+              if (playerLineupToUpdateKey && updatedLineupForPlayer) {
+                  updatedLineupForPlayer = updatedLineupForPlayer.map(p => {
+                      if (p.id === registroToDelete.bateadorId) {
+                          const updatedPlayerInnings = { ...p.innings };
+                          if (updatedPlayerInnings[registroToDelete.inning]) {
+                              updatedPlayerInnings[registroToDelete.inning] = updatedPlayerInnings[registroToDelete.inning].filter(
+                                  cell => cell.playInstanceId !== registroToDelete.id
+                              );
+                              if (updatedPlayerInnings[registroToDelete.inning].length === 0) {
+                                  delete updatedPlayerInnings[registroToDelete.inning];
+                              }
+                          }
+                          return { ...p, innings: updatedPlayerInnings };
+                      }
+                      return p;
+                  });
+              }
+              
+              const updateObject: Partial<PartidoData> = { registrosJuego: updatedRegistros };
+              if (playerLineupToUpdateKey && updatedLineupForPlayer) {
+                updateObject[playerLineupToUpdateKey] = updatedLineupForPlayer;
+              }
+
+              return ({ ...prev, ...updateObject });
+            });
+            setIsConfirmActionModalOpen(false);
         },
-        confirmButtonText: 'Borrar Partido',
         confirmButtonVariant: 'danger',
+        confirmButtonText: "Eliminar Registro"
     });
     setIsConfirmActionModalOpen(true);
   };
@@ -2023,289 +2627,945 @@ export const PartidosPage: React.FC = () => {
     setTempEditedPlayIdInModal(registro.jugadaId);
     setIsEditRegistroModalOpen(true);
   };
-  
-  const handleConfirmEditRegistro = () => {
-      // Logic for editing a game log entry would be complex and is omitted for this fix.
-      // It would require recalculating all subsequent game states.
-      alert("La edición del historial de jugadas no está implementada en esta versión.");
-      setIsEditRegistroModalOpen(false);
-      setEditingRegistro(null);
+
+  const handleCloseEditRegistroModal = () => {
+    setIsEditRegistroModalOpen(false);
+    setEditingRegistro(null);
+    setTempEditedPlayIdInModal('');
   };
 
+  const handleSaveEditedRegistro = (selectedJugada: Jugada) => {
+    if (!currentPartido || !editingRegistro) return;
+    updateCurrentPartidoAndHistory(prev => {
+        if (!prev || !editingRegistro) return prev;
+        const updatedRegistros = prev.registrosJuego.map(r =>
+            r.id === editingRegistro.id ? { ...r, jugadaId: selectedJugada.jugada, descripcion: getOriginalJugadaDescription(selectedJugada.jugada, selectedJugada.descripcion) } : r
+        );
+        
+        let playerLineupToUpdateKey: 'lineupVisitante' | 'lineupLocal' | null = null;
+        if (prev.lineupVisitante.some(p => p.id === editingRegistro.bateadorId)) {
+            playerLineupToUpdateKey = 'lineupVisitante';
+        } else if (prev.lineupLocal.some(p => p.id === editingRegistro.bateadorId)) {
+            playerLineupToUpdateKey = 'lineupLocal';
+        }
+
+        let updatedLineupForPlayer: LineupPlayer[] | undefined = playerLineupToUpdateKey ? [...prev[playerLineupToUpdateKey]] : undefined;
+
+        if (playerLineupToUpdateKey && updatedLineupForPlayer) {
+            updatedLineupForPlayer = updatedLineupForPlayer.map(p => {
+                if (p.id === editingRegistro.bateadorId) {
+                    const updatedPlayerInnings = { ...p.innings };
+                    if (updatedPlayerInnings[editingRegistro.inning]) {
+                        updatedPlayerInnings[editingRegistro.inning] = updatedPlayerInnings[editingRegistro.inning].map(cell => {
+                            if (cell.playInstanceId === editingRegistro.id) {
+                                return {
+                                    ...cell,
+                                    jugadaId: selectedJugada.jugada,
+                                    descripcion: getOriginalJugadaDescription(selectedJugada.jugada, selectedJugada.descripcion),
+                                    playDisplayValue: `${selectedJugada.jugada}${editingRegistro.rbi > 0 ? ` (${editingRegistro.rbi} RBI)` : ''}`
+                                };
+                            }
+                            return cell;
+                        });
+                    }
+                    return { ...p, innings: updatedPlayerInnings };
+                }
+                return p;
+            });
+        }
+        
+        const updateObject: Partial<PartidoData> = { registrosJuego: updatedRegistros };
+        if (playerLineupToUpdateKey && updatedLineupForPlayer) {
+            updateObject[playerLineupToUpdateKey] = updatedLineupForPlayer;
+        }
+
+        return ({ ...prev, ...updateObject });
+    });
+    handleCloseEditRegistroModal();
+  };
+
+  const handleSaveGame = () => {
+    if (!currentPartido) return;
+    const gameToSave: JuegoGuardado = {
+      ...currentPartido,
+      idJuego: currentPartido.idJuego || generateUUID(),
+      timestampGuardado: Date.now(),
+    };
+    setHistorial(prevHistorial => {
+      const existingIndex = prevHistorial.findIndex(g => g.idJuego === gameToSave.idJuego);
+      if (existingIndex > -1) {
+        const updatedHistorial = [...prevHistorial];
+        updatedHistorial[existingIndex] = gameToSave;
+        return updatedHistorial;
+      }
+      return [...prevHistorial, gameToSave];
+    });
+    alert('Juego guardado en el historial.');
+  };
+
+  const requestEndGame = () => {
+    setConfirmActionModalProps({
+        title: 'Terminar Partido',
+        message: '¿Está seguro de que desea terminar el partido? El juego se guardará en el historial.',
+        onConfirm: () => {
+            handleSaveGame();
+            setPartidoEnCurso(null);
+            setPartidoHistoryStack([]);
+            navigate('/configurar-partido');
+            setIsConfirmActionModalOpen(false);
+        },
+        confirmButtonVariant: 'danger',
+        confirmButtonText: 'Terminar Partido'
+    });
+    setIsConfirmActionModalOpen(true);
+  };
+
+  const requestResetPartido = () => {
+    setConfirmActionModalProps({
+        title: 'Reiniciar Partido',
+        message: '¿Está seguro de que desea reiniciar el partido? Se borrarán todas las jugadas y estadísticas, pero se mantendrá la configuración y los lineups.',
+        onConfirm: () => {
+            if(!currentPartido) return;
+            saveToHistory(currentPartido);
+            updateCurrentPartidoAndHistory(prev => {
+                if (!prev) return null;
+
+                const firstVisitorBatterIdReset = findNextBatterInLineup(prev.lineupVisitante, null);
+                const firstLocalBatterIdReset = findNextBatterInLineup(prev.lineupLocal, null);
+
+                return {
+                    ...prev,
+                    gameStatus: {
+                        ...createEmptyGameStatus(),
+                        currentBatterLineupPlayerId: firstVisitorBatterIdReset, 
+                        nextVisitorBatterLineupPlayerId: firstVisitorBatterIdReset,
+                        nextLocalBatterLineupPlayerId: firstLocalBatterIdReset,
+                        currentHalfInning: 'Top',
+                        actualInningNumber: 1
+                    },
+                    visitanteStats: createEmptyTeamStats(),
+                    localStats: createEmptyTeamStats(),
+                    registrosJuego: [],
+                    lineupVisitante: prev.lineupVisitante.map(p => ({...p, stats: createEmptyBatterStats(), innings: {}})), 
+                    lineupLocal: prev.lineupLocal.map(p => ({...p, stats: createEmptyBatterStats(), innings: {}})),       
+                };
+            });
+            setInningToShowInLineups(1); 
+            alert('Partido reiniciado.');
+            setIsConfirmActionModalOpen(false);
+        },
+        confirmButtonVariant: 'warning',
+        confirmButtonText: 'Reiniciar'
+    });
+    setIsConfirmActionModalOpen(true);
+  };
+
+  const handleUndoLastAnnotation = () => {
+    if (partidoHistoryStack.length > 0) {
+        const previousState = partidoHistoryStack[0];
+        setCurrentPartido(previousState);
+        setPartidoHistoryStack(prevStack => prevStack.slice(1));
+        setInningToShowInLineups(previousState.gameStatus.actualInningNumber); 
+
+        if (previousState) {
+            const pitcher = getCurrentOpposingPitcher(previousState);
+            const formatoDesc = formatos.find(f => f.codigo === previousState.formatoJuegoId)?.descripcion || 'N/A';
+            const batterPlayer = (previousState.gameStatus.currentHalfInning === 'Top' ? previousState.lineupVisitante : previousState.lineupLocal).find(p => p.id === previousState.gameStatus.currentBatterLineupPlayerId);
+
+            const undoMarkerRegistro: RegistroJuego = {
+                id: generateUUID(),
+                timestamp: Date.now(),
+                inning: previousState.gameStatus.actualInningNumber,
+                halfInning: previousState.gameStatus.currentHalfInning,
+                bateadorId: 'UNDO_ACTION',
+                bateadorNombre: 'Sistema',
+                bateadorPosicion: '',
+                pitcherResponsableId: pitcher ? pitcher.id : null,
+                pitcherResponsableNombre: pitcher ? pitcher.nombreJugador : null,
+                equipoBateadorNombre: '',
+                jugadaId: 'UNDO_ACTION',
+                descripcion: 'Acción de deshacer última anotación.',
+                outsPrev: previousState.gameStatus.outs,
+                outsAfter: previousState.gameStatus.outs,
+                basesPrevState: previousState.gameStatus.bases.map(p => p?.lineupPlayerId ?? 'null').join('-'),
+                basesAfterState: previousState.gameStatus.bases.map(p => p?.lineupPlayerId ?? 'null').join('-'),
+                runScored: 0,
+                rbi: 0,
+                isUndoMarker: true,
+                fechaDelPartido: previousState.fecha,
+                formatoDelPartidoDesc: formatoDesc,
+                numeroDelPartido: previousState.numeroJuego,
+                ordenDelBateador: batterPlayer?.ordenBate || 0,
+            };
+
+            updateCurrentPartidoAndHistory(current => ({
+                ...current!,
+                registrosJuego: [...current!.registrosJuego, undoMarkerRegistro]
+            }));
+        }
+        alert('Última anotación deshecha.');
+    } else {
+        alert('No hay más acciones para deshacer.');
+    }
+  };
+
+  const handleConfirmFielderChoice = (result: FielderChoiceResult) => {
+    if (!currentPartido || !fielderChoiceModalState.batter) return;
+    saveToHistory(currentPartido);
+  
+    const batterLineupPlayer = fielderChoiceModalState.batter;
+    const initialOutsForPlay = fielderChoiceModalState.initialOuts;
+    const pitcher = getCurrentOpposingPitcher(currentPartido);
+    const formatoDesc = formatos.find(f => f.codigo === currentPartido.formatoJuegoId)?.descripcion || 'N/A';
+    const teamAtBatHalfInning = currentPartido.gameStatus.currentHalfInning;
+    const batterLineupKey: 'lineupVisitante' | 'lineupLocal' = teamAtBatHalfInning === 'Top' ? 'lineupVisitante' : 'lineupLocal';
+    const currentLineupForTeam = currentPartido[batterLineupKey];
+  
+    const outJugadaDef = jugadasDB.find(j => j.jugada === 'OUT_RUNNER_BASE');
+    const runJugadaDef = jugadasDB.find(j => j.jugada === 'R');
+    const rbiJugadaDef = jugadasDB.find(j => j.jugada === 'RBI');
+    const fcJugadaDef = jugadasDB.find(j => j.jugada === 'FC');
+    const advOtroJugadaDef = jugadasDB.find(j => j.jugada === 'ADV_OTRO'); 
+  
+    updateCurrentPartidoAndHistory(prev => {
+      if (!prev) return prev;
+      let updatedPartido = { ...prev };
+      const initialBasesForLog = [...prev.gameStatus.bases];
+      let newBasesState: [PlayerOnBase | null, PlayerOnBase | null, PlayerOnBase | null] = [...prev.gameStatus.bases];
+      let outsGeneratedThisPlay = 0;
+      let totalRunsScoredOnPlay = 0;
+      let totalRBIsForBatterOnPlay = 0;
+  
+      updatedPartido[batterLineupKey] = updatedPartido[batterLineupKey].map(p => {
+        if (p.id === batterLineupPlayer.id) {
+          return { ...p, stats: { ...p.stats, atBats: p.stats.atBats + 1, plateAppearances: p.stats.plateAppearances + 1 } };
+        }
+        return p;
+      });
+  
+      const batterFinalDest = result.batterAdvancement;
+      const batterAsPBase: PlayerOnBase = { lineupPlayerId: batterLineupPlayer.id, jugadorId: batterLineupPlayer.jugadorId, nombreJugador: batterLineupPlayer.nombreJugador, reachedOnJugadaId: 'FC' };
+      
+      if (batterFinalDest === 0 || result.primaryOutPlayerId === batterLineupPlayer.id) {
+        outsGeneratedThisPlay++;
+      }
+  
+      if (result.primaryOutPlayerId && result.primaryOutPlayerId !== batterLineupPlayer.id) {
+        const outedRunnerInfo = fielderChoiceModalState.runnersOnBase.find(r => r.lineupPlayerId === result.primaryOutPlayerId);
+        if (outedRunnerInfo) {
+          outsGeneratedThisPlay++;
+          const runnerOriginalBaseIdx = newBasesState.findIndex(b => b?.lineupPlayerId === outedRunnerInfo.lineupPlayerId);
+          if (runnerOriginalBaseIdx !== -1) newBasesState[runnerOriginalBaseIdx] = null;
+          
+          if (outJugadaDef) {
+            const outRunnerLog: RegistroJuego = {
+              id: generateUUID(), timestamp: Date.now(), inning: updatedPartido.gameStatus.actualInningNumber,
+              halfInning: updatedPartido.gameStatus.currentHalfInning, bateadorId: outedRunnerInfo.lineupPlayerId,
+              bateadorNombre: outedRunnerInfo.nombreJugador, 
+              bateadorPosicion: currentLineupForTeam.find(p=>p.id===outedRunnerInfo.lineupPlayerId)?.posicion || '',
+              pitcherResponsableId: pitcher?.id || null, pitcherResponsableNombre: pitcher?.nombreJugador || null,
+              equipoBateadorNombre: teamAtBatHalfInning === 'Top' ? updatedPartido.nombreEquipoVisitante : updatedPartido.nombreEquipoLocal,
+              jugadaId: outJugadaDef.jugada, descripcion: getOriginalJugadaDescription(outJugadaDef.jugada),
+              outsPrev: initialOutsForPlay + (outsGeneratedThisPlay > 0 ? outsGeneratedThisPlay -1 : 0), 
+              outsAfter: initialOutsForPlay + outsGeneratedThisPlay,
+              basesPrevState: initialBasesForLog.map(r => r?.lineupPlayerId || 'null').join('-'),
+              basesAfterState: "Pending", runScored: 0, rbi: 0,
+              fechaDelPartido: updatedPartido.fecha, formatoDelPartidoDesc: formatoDesc, numeroDelPartido: updatedPartido.numeroJuego,
+              ordenDelBateador: currentLineupForTeam.find(p=>p.id===outedRunnerInfo.lineupPlayerId)?.ordenBate || 0
+            };
+            updatedPartido.registrosJuego.push(outRunnerLog);
+            updatedPartido[batterLineupKey] = updatedPartido[batterLineupKey].map(p => {
+              if (p.id === outedRunnerInfo.lineupPlayerId) {
+                const updatedInnings = { ...p.innings };
+                if (!updatedInnings[outRunnerLog.inning]) updatedInnings[outRunnerLog.inning] = [];
+                updatedInnings[outRunnerLog.inning].push({ playInstanceId: outRunnerLog.id, jugadaId: outJugadaDef.jugada, descripcion: outRunnerLog.descripcion, playDisplayValue: 'Out'});
+                return { ...p, innings: updatedInnings };
+              }
+              return p;
+            });
+          }
+        }
+      }
+      
+      const playersToPlaceOnBases: { player: PlayerOnBase, targetBase: number }[] = [];
+      if (batterFinalDest > 0 && batterFinalDest < 4 && result.primaryOutPlayerId !== batterLineupPlayer.id) { 
+        playersToPlaceOnBases.push({ player: batterAsPBase, targetBase: batterFinalDest });
+      } else if (batterFinalDest === 4 && result.primaryOutPlayerId !== batterLineupPlayer.id) { 
+        _applySingleRunScoringLogic(updatedPartido, batterLineupPlayer, null);
+        totalRunsScoredOnPlay++;
+        if (runJugadaDef) { 
+            const batterRunLog : RegistroJuego = {
+                id: generateUUID(), timestamp: Date.now(), inning: updatedPartido.gameStatus.actualInningNumber,
+                halfInning: updatedPartido.gameStatus.currentHalfInning, bateadorId: batterLineupPlayer.id,
+                bateadorNombre: batterLineupPlayer.nombreJugador, bateadorPosicion: batterLineupPlayer.posicion,
+                pitcherResponsableId: pitcher?.id || null, pitcherResponsableNombre: pitcher?.nombreJugador || null,
+                equipoBateadorNombre: teamAtBatHalfInning === 'Top' ? updatedPartido.nombreEquipoVisitante : updatedPartido.nombreEquipoLocal,
+                jugadaId: runJugadaDef.jugada, descripcion: getOriginalJugadaDescription(runJugadaDef.jugada),
+                outsPrev: initialOutsForPlay + outsGeneratedThisPlay, outsAfter: initialOutsForPlay + outsGeneratedThisPlay, 
+                basesPrevState: initialBasesForLog.map(r => r?.lineupPlayerId || 'null').join('-'),
+                basesAfterState: "Pending", runScored: 1, rbi: 0,
+                fechaDelPartido: updatedPartido.fecha, formatoDelPartidoDesc: formatoDesc, numeroDelPartido: updatedPartido.numeroJuego,
+                ordenDelBateador: batterLineupPlayer.ordenBate
+            };
+            updatedPartido.registrosJuego.push(batterRunLog);
+             updatedPartido[batterLineupKey] = updatedPartido[batterLineupKey].map(p => {
+                if (p.id === batterLineupPlayer.id) {
+                    const updatedInnings = { ...p.innings };
+                    if (!updatedInnings[batterRunLog.inning]) updatedInnings[batterRunLog.inning] = [];
+                    updatedInnings[batterRunLog.inning].push({playInstanceId: batterRunLog.id, jugadaId: 'R', descripcion: batterRunLog.descripcion, playDisplayValue: 'R'});
+                    return {...p, innings: updatedInnings};
+                }
+                return p;
+            });
+        }
+      }
+
+      fielderChoiceModalState.runnersOnBase.forEach(runner => {
+        if (runner.lineupPlayerId === result.primaryOutPlayerId) return; 
+
+        const runnerDest = result.runnerAdvancements[runner.lineupPlayerId];
+        const runnerOriginalBaseIdx = newBasesState.findIndex(b => b?.lineupPlayerId === runner.lineupPlayerId);
+        if (runnerOriginalBaseIdx !== -1) newBasesState[runnerOriginalBaseIdx] = null;
+        const runnerLineupData = currentLineupForTeam.find(p => p.id === runner.lineupPlayerId);
+
+        if (runnerDest === 0) { 
+          if(result.primaryOutPlayerId !== runner.lineupPlayerId) outsGeneratedThisPlay++; 
+          if (outJugadaDef && runnerLineupData) {
+            const outRunnerLog: RegistroJuego = { 
+                id: generateUUID(), timestamp: Date.now(), inning: updatedPartido.gameStatus.actualInningNumber,
+                halfInning: updatedPartido.gameStatus.currentHalfInning, bateadorId: runner.lineupPlayerId,
+                bateadorNombre: runner.nombreJugador, bateadorPosicion: runnerLineupData.posicion,
+                pitcherResponsableId: pitcher?.id || null, pitcherResponsableNombre: pitcher?.nombreJugador || null,
+                equipoBateadorNombre: teamAtBatHalfInning === 'Top' ? updatedPartido.nombreEquipoVisitante : updatedPartido.nombreEquipoLocal,
+                jugadaId: outJugadaDef.jugada, descripcion: getOriginalJugadaDescription(outJugadaDef.jugada),
+                outsPrev: initialOutsForPlay + outsGeneratedThisPlay -1, outsAfter: initialOutsForPlay + outsGeneratedThisPlay,
+                basesPrevState: initialBasesForLog.map(r => r?.lineupPlayerId || 'null').join('-'),
+                basesAfterState: "Pending", runScored: 0, rbi: 0,
+                fechaDelPartido: updatedPartido.fecha, formatoDelPartidoDesc: formatoDesc, numeroDelPartido: updatedPartido.numeroJuego,
+                ordenDelBateador: runnerLineupData.ordenBate
+            };
+            updatedPartido.registrosJuego.push(outRunnerLog);
+            updatedPartido[batterLineupKey] = updatedPartido[batterLineupKey].map(p => {
+              if (p.id === runner.lineupPlayerId) {
+                const updatedInnings = { ...p.innings };
+                if (!updatedInnings[outRunnerLog.inning]) updatedInnings[outRunnerLog.inning] = [];
+                updatedInnings[outRunnerLog.inning].push({ playInstanceId: outRunnerLog.id, jugadaId: outJugadaDef.jugada, descripcion: outRunnerLog.descripcion, playDisplayValue: 'Out'});
+                return { ...p, innings: updatedInnings };
+              }
+              return p;
+            });
+          }
+        } else if (runnerDest === 4) { 
+            const batterIsOutOnPlay = result.batterAdvancement === 0 || result.primaryOutPlayerId === batterLineupPlayer.id;
+            const primaryOutWasARunner = result.primaryOutPlayerId !== null && result.primaryOutPlayerId !== batterLineupPlayer.id;
+            let batterShouldGetRbiForThisRunner = false;
+            if (!batterIsOutOnPlay) { 
+              if (!primaryOutWasARunner) { 
+                batterShouldGetRbiForThisRunner = true;
+              }
+            }
+          
+            _applySingleRunScoringLogic(updatedPartido, runner, batterShouldGetRbiForThisRunner ? batterLineupPlayer.id : null);
+            totalRunsScoredOnPlay++;
+            if (batterShouldGetRbiForThisRunner) totalRBIsForBatterOnPlay++;
+
+            if (runJugadaDef && runnerLineupData) {
+                const runLog: RegistroJuego = { 
+                    id: generateUUID(), timestamp: Date.now(), inning: updatedPartido.gameStatus.actualInningNumber,
+                    halfInning: updatedPartido.gameStatus.currentHalfInning, bateadorId: runner.lineupPlayerId,
+                    bateadorNombre: runner.nombreJugador, bateadorPosicion: runnerLineupData.posicion,
+                    pitcherResponsableId: pitcher?.id || null, pitcherResponsableNombre: pitcher?.nombreJugador || null,
+                    equipoBateadorNombre: teamAtBatHalfInning === 'Top' ? updatedPartido.nombreEquipoVisitante : updatedPartido.nombreEquipoLocal,
+                    jugadaId: runJugadaDef.jugada, descripcion: getOriginalJugadaDescription(runJugadaDef.jugada),
+                    outsPrev: initialOutsForPlay + outsGeneratedThisPlay, outsAfter: initialOutsForPlay + outsGeneratedThisPlay,
+                    basesPrevState: initialBasesForLog.map(r => r?.lineupPlayerId || 'null').join('-'),
+                    basesAfterState: "Pending", runScored: 1, rbi: 0,
+                    fechaDelPartido: updatedPartido.fecha, formatoDelPartidoDesc: formatoDesc, numeroDelPartido: updatedPartido.numeroJuego,
+                    ordenDelBateador: runnerLineupData.ordenBate
+                };
+                updatedPartido.registrosJuego.push(runLog);
+                 updatedPartido[batterLineupKey] = updatedPartido[batterLineupKey].map(p => {
+                    if (p.id === runner.lineupPlayerId) {
+                        const updatedInnings = { ...p.innings };
+                        if (!updatedInnings[runLog.inning]) updatedInnings[runLog.inning] = [];
+                        updatedInnings[runLog.inning].push({playInstanceId: runLog.id, jugadaId: 'R', descripcion: runLog.descripcion, playDisplayValue: 'R'});
+                        return {...p, innings: updatedInnings};
+                    }
+                    return p;
+                });
+            }
+            if (batterShouldGetRbiForThisRunner && rbiJugadaDef) {
+                const rbiLogForBatter: RegistroJuego = { 
+                    id: generateUUID(), timestamp: Date.now(), inning: updatedPartido.gameStatus.actualInningNumber,
+                    halfInning: updatedPartido.gameStatus.currentHalfInning, bateadorId: batterLineupPlayer.id,
+                    bateadorNombre: batterLineupPlayer.nombreJugador, bateadorPosicion: batterLineupPlayer.posicion,
+                    pitcherResponsableId: pitcher?.id || null, pitcherResponsableNombre: pitcher?.nombreJugador || null,
+                    equipoBateadorNombre: teamAtBatHalfInning === 'Top' ? updatedPartido.nombreEquipoVisitante : updatedPartido.nombreEquipoLocal,
+                    jugadaId: rbiJugadaDef.jugada, descripcion: getOriginalJugadaDescription(rbiJugadaDef.jugada),
+                    outsPrev: initialOutsForPlay + outsGeneratedThisPlay, outsAfter: initialOutsForPlay + outsGeneratedThisPlay,
+                    basesPrevState: initialBasesForLog.map(r => r?.lineupPlayerId || 'null').join('-'),
+                    basesAfterState: "Pending", runScored: 0, rbi: 1,
+                    fechaDelPartido: updatedPartido.fecha, formatoDelPartidoDesc: formatoDesc, numeroDelPartido: updatedPartido.numeroJuego,
+                    ordenDelBateador: batterLineupPlayer.ordenBate
+                };
+                updatedPartido.registrosJuego.push(rbiLogForBatter);
+            }
+        } else if (runnerDest >= 1 && runnerDest <= 3) {
+          playersToPlaceOnBases.push({ player: runner, targetBase: runnerDest });
+          if (advOtroJugadaDef && runnerLineupData) {
+             const advLog: RegistroJuego = { 
+                id: generateUUID(), timestamp: Date.now(), inning: updatedPartido.gameStatus.actualInningNumber,
+                halfInning: updatedPartido.gameStatus.currentHalfInning, bateadorId: runner.lineupPlayerId,
+                bateadorNombre: runner.nombreJugador, bateadorPosicion: runnerLineupData.posicion,
+                pitcherResponsableId: pitcher?.id || null, pitcherResponsableNombre: pitcher?.nombreJugador || null,
+                equipoBateadorNombre: teamAtBatHalfInning === 'Top' ? updatedPartido.nombreEquipoVisitante : updatedPartido.nombreEquipoLocal,
+                jugadaId: advOtroJugadaDef.jugada, descripcion: getOriginalJugadaDescription(advOtroJugadaDef.jugada),
+                outsPrev: initialOutsForPlay + outsGeneratedThisPlay, outsAfter: initialOutsForPlay + outsGeneratedThisPlay,
+                basesPrevState: initialBasesForLog.map(r => r?.lineupPlayerId || 'null').join('-'),
+                basesAfterState: "Pending", runScored: 0, rbi: 0,
+                fechaDelPartido: updatedPartido.fecha, formatoDelPartidoDesc: formatoDesc, numeroDelPartido: updatedPartido.numeroJuego,
+                ordenDelBateador: runnerLineupData.ordenBate
+             };
+             updatedPartido.registrosJuego.push(advLog);
+             updatedPartido[batterLineupKey] = updatedPartido[batterLineupKey].map(p => {
+                if (p.id === runner.lineupPlayerId) {
+                    const updatedInnings = { ...p.innings };
+                    if (!updatedInnings[advLog.inning]) updatedInnings[advLog.inning] = [];
+                    updatedInnings[advLog.inning].push({playInstanceId: advLog.id, jugadaId: advLog.jugadaId, descripcion: advLog.descripcion, playDisplayValue: `${getBaseLabel(runnerDest)}`});
+                    return {...p, innings: updatedInnings};
+                }
+                return p;
+            });
+          }
+        }
+      });
+      
+      playersToPlaceOnBases.sort((a, b) => b.targetBase - a.targetBase);
+      playersToPlaceOnBases.forEach(item => {
+          if(item.targetBase >=1 && item.targetBase <=3){
+            if (newBasesState[item.targetBase - 1] === null) {
+                newBasesState[item.targetBase - 1] = item.player;
+            } else {
+                console.warn(`FC Base collision: ${item.player.nombreJugador} to ${getBaseLabel(item.targetBase)}, but occupied by ${newBasesState[item.targetBase-1]?.nombreJugador}`);
+            }
+          }
+      });
+
+      const finalBasesStr = newBasesState.map(r => r?.lineupPlayerId || 'null').join('-');
+      updatedPartido.registrosJuego = updatedPartido.registrosJuego.map(reg => 
+        reg.basesAfterState === "Pending" ? { ...reg, basesAfterState: finalBasesStr } : reg
+      );
+      
+      let fcLogDescription = getOriginalJugadaDescription('FC');
+      if (batterFinalDest === 0 || result.primaryOutPlayerId === batterLineupPlayer.id) fcLogDescription += ` (Bateador Out)`;
+      
+      const fcLogForBatter: RegistroJuego = {
+        id: generateUUID(), timestamp: Date.now(), inning: updatedPartido.gameStatus.actualInningNumber,
+        halfInning: updatedPartido.gameStatus.currentHalfInning, bateadorId: batterLineupPlayer.id,
+        bateadorNombre: batterLineupPlayer.nombreJugador, bateadorPosicion: batterLineupPlayer.posicion,
+        pitcherResponsableId: pitcher ? pitcher.id : null, pitcherResponsableNombre: pitcher ? pitcher.nombreJugador : null,
+        equipoBateadorNombre: teamAtBatHalfInning === 'Top' ? updatedPartido.nombreEquipoVisitante : updatedPartido.nombreEquipoLocal,
+        jugadaId: 'FC', descripcion: fcLogDescription,
+        outsPrev: initialOutsForPlay, outsAfter: initialOutsForPlay + outsGeneratedThisPlay,
+        basesPrevState: initialBasesForLog.map(r => r?.lineupPlayerId || 'null').join('-'),
+        basesAfterState: finalBasesStr, 
+        runScored: totalRunsScoredOnPlay, 
+        rbi: totalRBIsForBatterOnPlay,
+        fechaDelPartido: updatedPartido.fecha, formatoDelPartidoDesc: formatoDesc, numeroDelPartido: updatedPartido.numeroJuego, ordenDelBateador: batterLineupPlayer.ordenBate,
+      };
+      updatedPartido.registrosJuego.push(fcLogForBatter);
+  
+      updatedPartido[batterLineupKey] = updatedPartido[batterLineupKey].map(p => {
+        if (p.id === batterLineupPlayer.id) {
+          const updatedInnings = { ...p.innings };
+          if (!updatedInnings[fcLogForBatter.inning]) updatedInnings[fcLogForBatter.inning] = [];
+          let cellDisplay = `FC`;
+          if(batterFinalDest === 0 || result.primaryOutPlayerId === batterLineupPlayer.id) cellDisplay = 'FC (Out)';
+          else if (batterFinalDest === 4) cellDisplay = 'R'; 
+          
+          if (totalRBIsForBatterOnPlay > 0 && batterFinalDest !== 4) { 
+            cellDisplay += ` (${totalRBIsForBatterOnPlay} RBI)`;
+          }
+          updatedInnings[fcLogForBatter.inning].push({ playInstanceId: fcLogForBatter.id, jugadaId: 'FC', descripcion: fcLogForBatter.descripcion, playDisplayValue: cellDisplay });
+          
+          const currentBatterStats = {...p.stats};
+          currentBatterStats.rbi += totalRBIsForBatterOnPlay;
+
+          return { ...p, innings: updatedInnings, stats: currentBatterStats };
+        }
+        return p;
+      });
+      
+      const { updatedGameStatus, gameShouldEnd } = _calculateOutsUpdate(
+        { ...prev.gameStatus, bases: newBasesState, outs: initialOutsForPlay },
+        outsGeneratedThisPlay,
+        updatedPartido.maxInnings,
+        updatedPartido.lineupVisitante,
+        updatedPartido.lineupLocal,
+        updatedPartido.visitanteStats.totalRuns,
+        updatedPartido.localStats.totalRuns
+      );
+      updatedPartido.gameStatus = updatedGameStatus;
+      if (fcJugadaDef) {
+        updatedPartido.gameStatus.lastPlayContext = { 
+            batterLineupPlayerId: batterLineupPlayer.id, 
+            jugada: fcJugadaDef, 
+            timestamp: Date.now(),
+            previousBatterLineupPlayerId: prev.gameStatus.lastPlayContext?.batterLineupPlayerId !== batterLineupPlayer.id ? prev.gameStatus.lastPlayContext?.batterLineupPlayerId : prev.gameStatus.lastPlayContext?.previousBatterLineupPlayerId
+        };
+      }
+      
+      if (gameShouldEnd && gamePhase === 'scoring') {
+        setGamePhase('ended');
+      }
+      
+      return updatedPartido;
+    });
+  
+    setFielderChoiceModalState({ isOpen: false, batter: null, runnersOnBase: [], initialOuts: 0 });
+    setCurrentPlayerForPlay(null);
+  };
+
+
+  const handleExportCurrentPartidoCSV = () => {
+    if (!currentPartido) {
+        alert("No hay partido en curso para exportar.");
+        return;
+    }
+    const metadataHeader = ["KEY", "VALUE"];
+    const metadataRows = [
+        ["idJuego", currentPartido.idJuego || ''], ["fecha", currentPartido.fecha],
+        ["formatoJuegoId", String(currentPartido.formatoJuegoId)], ["numeroJuego", currentPartido.numeroJuego],
+        ["nombreEquipoVisitante", currentPartido.nombreEquipoVisitante], ["nombreEquipoLocal", currentPartido.nombreEquipoLocal],
+        ["selectedEquipoVisitanteId", String(currentPartido.selectedEquipoVisitanteId || '')], ["selectedEquipoLocalId", String(currentPartido.selectedEquipoLocalId || '')],
+        ["maxInnings", String(currentPartido.maxInnings)], ["finalScoreVisitante", String(currentPartido.visitanteStats.totalRuns)],
+        ["finalScoreLocal", String(currentPartido.localStats.totalRuns)],
+    ];
+    const metadataCsv = Papa.unparse({ fields: metadataHeader, data: metadataRows });
+
+    const lineupHeaders = ["id", "ordenBate", "jugadorId", "nombreJugador", "posicion"];
+    const lineupVisitorData = currentPartido.lineupVisitante.map(p => ({ id: p.id, ordenBate: p.ordenBate, jugadorId: p.jugadorId, nombreJugador: `"${p.nombreJugador.replace(/"/g, '""')}"`, posicion: p.posicion }));
+    const lineupVisitorCsv = Papa.unparse({ fields: lineupHeaders, data: lineupVisitorData.map(p => lineupHeaders.map(h => p[h as keyof typeof p]))});
+    const lineupLocalData = currentPartido.lineupLocal.map(p => ({ id: p.id, ordenBate: p.ordenBate, jugadorId: p.jugadorId, nombreJugador: `"${p.nombreJugador.replace(/"/g, '""')}"`, posicion: p.posicion }));
+    const lineupLocalCsv = Papa.unparse({ fields: lineupHeaders, data: lineupLocalData.map(p => lineupHeaders.map(h => p[h as keyof typeof p]))});
+
+    let logCsv = "";
+    const logHeaders = ["id", "timestamp", "inning", "halfInning", "bateadorId", "bateadorNombre", "bateadorPosicion", "pitcherResponsableId", "pitcherResponsableNombre", "equipoBateadorNombre", "jugadaId", "descripcion", "categoria", "outsPrev", "outsAfter", "basesPrevState", "basesAfterState", "runScored", "rbi", "advancementReason", "fechaDelPartido", "formatoDelPartidoDesc", "numeroDelPartido", "ordenDelBateador"];
+    if (currentPartido.registrosJuego.length > 0) {
+        const logData = currentPartido.registrosJuego.map(r => {
+            const jugadaDef = jugadasDB.find(j => j.jugada === r.jugadaId);
+            return {
+                ...r,
+                bateadorNombre: `"${r.bateadorNombre.replace(/"/g, '""')}"`,
+                pitcherResponsableNombre: r.pitcherResponsableNombre ? `"${r.pitcherResponsableNombre.replace(/"/g, '""')}"` : '',
+                equipoBateadorNombre: `"${r.equipoBateadorNombre.replace(/"/g, '""')}"`,
+                descripcion: `"${r.descripcion.replace(/"/g, '""')}"`,
+                categoria: jugadaDef ? jugadaDef.category : (r.isUndoMarker ? '-' : 'N/A'),
+                advancementReason: r.advancementReason || ''
+            };
+        });
+        logCsv = Papa.unparse({ fields: logHeaders, data: logData.map(r => logHeaders.map(h => r[h as keyof typeof r]))});
+    } else { logCsv = Papa.unparse({ fields: logHeaders, data: [] }); }
+
+    const fullCsv = metadataCsv + "\n\n#LINEUP_VISITANTE_START\n" + lineupVisitorCsv + "\n\n#LINEUP_LOCAL_START\n" + lineupLocalCsv + "\n\n#REGISTROS_JUEGO_START\n" + logCsv;
+    const blob = new Blob([fullCsv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    const filename = `partido_${currentPartido.nombreEquipoVisitante}_vs_${currentPartido.nombreEquipoLocal}_${currentPartido.fecha}.csv`;
+    link.setAttribute("href", url); link.setAttribute("download", filename);
+    link.style.visibility = 'hidden'; document.body.appendChild(link);
+    link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
+  };
+  
+  const handleExportBoxScoreCSV = () => {
+    if (!currentPartido) {
+        alert("No hay partido en curso para exportar el Box Score.");
+        return;
+    }
+
+    const { maxInnings, visitanteStats, localStats, nombreEquipoVisitante, nombreEquipoLocal, lineupVisitante, lineupLocal, fecha } = currentPartido;
+    let csvString = "";
+
+    const lineScoreHeaders = ["Equipo", ...[...Array(maxInnings)].map((_, i) => String(i + 1)), "R", "H", "E"];
+    csvString += Papa.unparse({
+        fields: lineScoreHeaders,
+        data: [
+            [nombreEquipoVisitante, ...[...Array(maxInnings)].map((_, i) => visitanteStats.runsPerInning[i + 1] ?? 0), visitanteStats.totalRuns, visitanteStats.hits, visitanteStats.errors],
+            [nombreEquipoLocal, ...[...Array(maxInnings)].map((_, i) => localStats.runsPerInning[i + 1] ?? 0), localStats.totalRuns, localStats.hits, localStats.errors]
+        ]
+    }) + "\n\n";
+
+    const battingHeaders = ["Jugador", "Pos", "AB", "AP", "R", "H1", "H2", "H3", "HR", "RBI", "BB", "K"];
+    
+    csvString += `"${nombreEquipoVisitante} - Bateo"\n`;
+    const visitorBattingData = lineupVisitante.map(p => [
+        p.nombreJugador, p.posicion || '--', p.stats.atBats, p.stats.plateAppearances || 0, p.stats.runs, p.stats.singles || 0, p.stats.doubles || 0, p.stats.triples || 0, p.stats.homeRuns || 0, p.stats.rbi, p.stats.walks, p.stats.strikeouts
+    ]);
+    const visitorTotals = lineupVisitante.reduce((acc, p) => ({
+        ab: acc.ab + p.stats.atBats, ap: acc.ap + (p.stats.plateAppearances || 0) , r: acc.r + p.stats.runs, h1b: acc.h1b + (p.stats.singles || 0), h2b: acc.h2b + (p.stats.doubles || 0), h3b: acc.h3b + (p.stats.triples || 0), hr: acc.hr + (p.stats.homeRuns || 0), rbi: acc.rbi + p.stats.rbi, bb: acc.bb + p.stats.walks, k: acc.k + p.stats.strikeouts
+    }), { ab: 0, ap: 0, r: 0, h1b: 0, h2b: 0, h3b: 0, hr: 0, rbi: 0, bb: 0, k: 0 });
+    visitorBattingData.push(["TOTALES", "", visitorTotals.ab, visitorTotals.ap, visitorTotals.r, visitorTotals.h1b, visitorTotals.h2b, visitorTotals.h3b, visitorTotals.hr, visitorTotals.rbi, visitorTotals.bb, visitorTotals.k]);
+    csvString += Papa.unparse({ fields: battingHeaders, data: visitorBattingData }) + "\n\n";
+
+    csvString += `"${nombreEquipoLocal} - Bateo"\n`;
+    const localBattingData = lineupLocal.map(p => [
+        p.nombreJugador, p.posicion || '--', p.stats.atBats, p.stats.plateAppearances || 0, p.stats.runs, p.stats.singles || 0, p.stats.doubles || 0, p.stats.triples || 0, p.stats.homeRuns || 0, p.stats.rbi, p.stats.walks, p.stats.strikeouts
+    ]);
+    const localTotals = lineupLocal.reduce((acc, p) => ({
+        ab: acc.ab + p.stats.atBats, ap: acc.ap + (p.stats.plateAppearances || 0), r: acc.r + p.stats.runs, h1b: acc.h1b + (p.stats.singles || 0), h2b: acc.h2b + (p.stats.doubles || 0), h3b: acc.h3b + (p.stats.triples || 0), hr: acc.hr + (p.stats.homeRuns || 0), rbi: acc.rbi + p.stats.rbi, bb: acc.bb + p.stats.walks, k: acc.k + p.stats.strikeouts
+    }), { ab: 0, ap: 0, r: 0, h1b: 0, h2b: 0, h3b: 0, hr: 0, rbi: 0, bb: 0, k: 0 });
+    localBattingData.push(["TOTALES", "", localTotals.ab, localTotals.ap, localTotals.r, localTotals.h1b, localTotals.h2b, localTotals.h3b, localTotals.hr, localTotals.rbi, localTotals.bb, localTotals.k]);
+    csvString += Papa.unparse({ fields: battingHeaders, data: localBattingData });
+
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    const filename = `box_score_${nombreEquipoVisitante}_vs_${nombreEquipoLocal}_${fecha}.csv`;
+    link.setAttribute("href", url);
+    link.setAttribute("download", filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    alert('Box Score exportado como CSV.');
+  };
+
+
+  const gameLogColumns: TableColumn<RegistroJuego>[] = [
+    { header: 'Inn.', accessor: (item) => `${item.halfInning === 'Top' ? 'T' : 'B'}${item.inning}`, className: "w-12 text-xs"},
+    { header: 'Fecha', accessor: (item) => new Date(item.fechaDelPartido + 'T00:00:00').toLocaleDateString(), className: "text-xs hidden lg:table-cell" },
+    { header: 'Formato', accessor: 'formatoDelPartidoDesc', className: "text-xs hidden xl:table-cell truncate max-w-xs" },
+    { header: 'Juego #', accessor: 'numeroDelPartido', className: "text-xs hidden xl:table-cell" },
+    { header: 'Equipo', accessor: 'equipoBateadorNombre', className: "text-xs hidden sm:table-cell truncate max-w-[100px]" },
+    { header: 'Bateador', accessor: 'bateadorNombre', className: "text-xs truncate max-w-[120px]" },
+    { header: 'OB', accessor: 'ordenDelBateador', className: "text-xs w-10 text-center hidden md:table-cell"},
+    { header: 'Pos.', accessor: 'bateadorPosicion', className: "text-xs hidden md:table-cell" },
+    { header: 'Pitcher Rival', accessor: (item) => item.pitcherResponsableNombre || 'N/A', className: "text-xs hidden lg:table-cell truncate max-w-[120px]" },
+    { header: 'Descripción Jugada', accessor: 'descripcion', className: "text-xs truncate max-w-[150px]" },
+    {
+      header: 'Categoría',
+      accessor: (item: RegistroJuego) => {
+        if (item.isUndoMarker) return <span className="text-xs italic text-gray-500">-</span>;
+        const jugadaDef = jugadasDB.find(j => j.jugada === item.jugadaId);
+        return jugadaDef ? jugadaDef.category : 'N/A';
+      },
+      className: "text-xs hidden lg:table-cell"
+    },
+    {
+      header: 'Acciones',
+      accessor: (item) => item.isUndoMarker ? <span className="text-xs italic text-gray-500">Deshacer</span> : (
+        <div className="space-x-1 flex">
+          <IconButton icon={<EditIcon />} onClick={()=>handleOpenEditRegistroModal(item)} label="Editar Registro" className="text-blue-500 hover:text-blue-700 p-1" />
+          <IconButton icon={<MdDeleteForever className="w-5 h-5"/>} onClick={()=>requestDeleteRegistro(item)} label="Eliminar Registro" className="text-red-500 hover:text-red-700 p-1"/>
+        </div>
+      ),
+      className: "w-20 text-center"
+    }
+  ];
+
+  const handleOpenEditPlayerPositionModal = (player: LineupPlayer, team: ActiveLineupTab) => {
+    if (gamePhase === 'ended') return;
+    setEditingPlayerForPosition({ player, team });
+    setIsEditPlayerPositionModalOpen(true);
+  };
+
+
   if (!currentPartido) {
-    return (
-      <div className="text-center p-8">
-        <h1 className="text-2xl font-bold text-gray-700 dark:text-gray-200">Cargando partido...</h1>
-        <p className="text-gray-500 dark:text-gray-400 mt-2">Si esta pantalla persiste, es posible que no haya un partido en curso.</p>
-        <Button onClick={() => navigate('/configurar-partido')} variant="primary" className="mt-4">
-          Configurar Nuevo Partido
-        </Button>
-      </div>
-    );
+    return <div className="p-4 text-center">Redirigiendo a configuración de partido...</div>;
   }
 
-  const currentBatter = 
-    currentPartido.gameStatus.currentHalfInning === 'Top' 
-      ? currentPartido.lineupVisitante.find(p => p.id === currentPartido.gameStatus.currentBatterLineupPlayerId) 
-      : currentPartido.lineupLocal.find(p => p.id === currentPartido.gameStatus.currentBatterLineupPlayerId);
+  const playsToExcludeFromModal: Set<string> = new Set(['OUT_RUNNER_BASE', 'OUT_ROH', 'ED', 'R', 'RBI']); 
   
-  const lineupForTable = activeLineupTab === 'visitante' ? currentPartido.lineupVisitante : currentPartido.lineupLocal;
-  const teamLineupTableColumns: TableColumn<LineupPlayer>[] = [
-    { header: '#', accessor: 'ordenBate', className: 'w-8 text-center font-mono' },
-    { header: 'Jugador', accessor: 'nombreJugador', className: 'font-medium' },
-    { header: 'Pos.', accessor: 'posicion', className: 'w-12 text-center' },
-    ...Array.from({ length: currentPartido.maxInnings }, (_, i) => i + 1).map(inningNum => ({
-      header: String(inningNum),
-      accessor: (item: LineupPlayer) => (
-          <div className="text-center text-xs space-x-1">
-              {(item.innings[inningNum] || []).map(play => (
-                  <span key={play.playInstanceId} title={play.descripcion}>{play.playDisplayValue}</span>
-              ))}
-          </div>
-      ),
-      className: `w-16 text-center ${inningNum === inningToShowInLineups ? 'bg-blue-50 dark:bg-blue-900/50' : ''}`
-    })),
-  ];
+  const activeJugadasForModal = jugadasDB.filter(j => j.isActive && !playsToExcludeFromModal.has(j.jugada));
+  
+  const groupedPlays = activeJugadasForModal.reduce((acc, jugada) => {
+    const category = jugada.category;
+    if (!acc[category]) acc[category] = [];
+    acc[category].push(jugada);
+    return acc;
+  }, {} as Record<PlayCategory, Jugada[]>);
 
-  const gameLogTableColumns: TableColumn<RegistroJuego & {id: string}>[] = [
-    { header: 'Inn', accessor: (item) => `${item.inning}${item.halfInning === 'Top' ? '↑' : '↓'}`, className: "w-10" },
-    { header: 'Jugador', accessor: 'bateadorNombre' },
-    { header: 'Jugada', accessor: (item) => <span title={item.descripcion}>{item.jugadaId}</span>, className: "w-16 font-bold" },
-    { header: 'Descripción', accessor: 'descripcion' },
-    { header: 'Outs', accessor: 'outsAfter', className: "w-12 text-center" },
-    { header: 'Acciones', accessor: (item) => (
-        <IconButton icon={<EditIcon />} onClick={() => handleOpenEditRegistroModal(item)} label="Editar Jugada" />
-    ), className: "w-16 text-center" },
-  ];
+  const playCategoryOrder: PlayCategory[] = [PlayCategory.HIT, PlayCategory.ON_BASE, PlayCategory.OUT, PlayCategory.ADVANCEMENT, PlayCategory.SPECIAL, PlayCategory.PITCH_OUTCOME];
+  const playCategoryColors: Record<PlayCategory, "primary"|"secondary"|"success"|"danger"|"warning"|"info"|"light"> = {[PlayCategory.HIT]:"success",[PlayCategory.OUT]:"danger",[PlayCategory.ON_BASE]:"info",[PlayCategory.ADVANCEMENT]:"secondary",[PlayCategory.SPECIAL]:"warning",[PlayCategory.PITCH_OUTCOME]:"light"};
+
+  const { gameStatus, visitanteStats, localStats, maxInnings } = currentPartido;
+  let currentBatterDisplay: LineupPlayer|undefined, onDeckBatterDisplay: LineupPlayer|undefined;
+
+  const currentLineup = gameStatus.currentHalfInning === 'Top' ? currentPartido.lineupVisitante : currentPartido.lineupLocal;
+  if (currentLineup.length > 0) {
+      currentBatterDisplay = currentLineup.find(p => p.id === gameStatus.currentBatterLineupPlayerId && p.posicion !== 'BE' && p.posicion !== EMPTY_POSICION_PLACEHOLDER);
+
+      if (currentBatterDisplay) { 
+          const onDeckBatterId = findNextBatterInLineup(currentLineup, currentBatterDisplay.id);
+          if(onDeckBatterId) onDeckBatterDisplay = currentLineup.find(p => p.id === onDeckBatterId && p.posicion !== 'BE' && p.posicion !== EMPTY_POSICION_PLACEHOLDER);
+      } else if (!gameStatus.currentBatterLineupPlayerId && gameStatus.outs < 3) { 
+         const nextBatterId = gameStatus.currentHalfInning === 'Top' ? gameStatus.nextVisitorBatterLineupPlayerId : gameStatus.nextLocalBatterLineupPlayerId;
+         if (nextBatterId) {
+            currentBatterDisplay = currentLineup.find(p => p.id === nextBatterId && p.posicion !== 'BE' && p.posicion !== EMPTY_POSICION_PLACEHOLDER);
+         }
+      }
+  }
+
+  const lineupToDisplay = activeLineupTab === 'visitante' ? currentPartido.lineupVisitante : currentPartido.lineupLocal;
+  const teamTypeForDisplay: ActiveLineupTab = activeLineupTab;
+
+  const handlePreviousInningLineup = () => {
+    setInningToShowInLineups(prev => Math.max(1, prev - 1));
+  };
+  const handleNextInningLineup = () => {
+    if(currentPartido) {
+        setInningToShowInLineups(prev => Math.min(currentPartido.gameStatus.actualInningNumber, prev + 1));
+    }
+  };
 
 
   return (
-    <div className="space-y-6">
-       {/* Game Header */}
-      <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-md sticky top-16 z-30">
-        <div className="grid grid-cols-3 items-center text-center">
-            <div className="text-left">
-                <p className="text-xl font-bold text-gray-800 dark:text-gray-100">{currentPartido.nombreEquipoVisitante}</p>
-                <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">{currentPartido.visitanteStats.totalRuns}</p>
-            </div>
-            <div>
-                <p className="text-lg font-semibold text-gray-600 dark:text-gray-300">
-                    {currentPartido.gameStatus.currentHalfInning === 'Top' ? '⬆' : '⬇'} Inning {currentPartido.gameStatus.actualInningNumber}
-                </p>
-                <p className="text-md text-gray-500 dark:text-gray-400">Outs: {currentPartido.gameStatus.outs}</p>
-            </div>
-            <div className="text-right">
-                <p className="text-xl font-bold text-gray-800 dark:text-gray-100">{currentPartido.nombreEquipoLocal}</p>
-                <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">{currentPartido.localStats.totalRuns}</p>
-            </div>
-        </div>
+    <div className="p-1 sm:p-4 space-y-6">
+      <div className="bg-white p-4 shadow rounded-lg"><h1 className="text-2xl font-bold text-center mb-2">{currentPartido.nombreEquipoVisitante} vs {currentPartido.nombreEquipoLocal}</h1><p className="text-center text-sm text-gray-600">Fecha: {new Date(currentPartido.fecha+'T00:00:00').toLocaleDateString()} | Formato: {formatos.find(f=>f.codigo===currentPartido.formatoJuegoId)?.descripcion||'N/A'} | Juego #: {currentPartido.numeroJuego}</p></div>
+      <div className="bg-white p-4 shadow rounded-lg overflow-x-auto"><h2 className="text-xl font-semibold mb-2">Marcador</h2><table className="min-w-full table-auto"><thead><tr className="bg-gray-100"><th className="p-2 border w-1/4">Equipo</th>{[...Array(maxInnings)].map((_,i)=><th key={i} className="p-2 border text-center w-10">{i+1}</th>)}<th className="p-2 border text-center w-12">R</th><th className="p-2 border text-center w-12">H</th><th className="p-2 border text-center w-12">E</th></tr></thead><tbody><tr><td className="p-2 border font-semibold">{currentPartido.nombreEquipoVisitante}</td>{[...Array(maxInnings)].map((_,i)=><td key={i} className="p-2 border text-center">{visitanteStats.runsPerInning[i+1]??'-'}</td>)}<td className="p-2 border text-center font-bold">{visitanteStats.totalRuns}</td><td className="p-2 border text-center">{visitanteStats.hits}</td><td className="p-2 border text-center">{visitanteStats.errors}</td></tr><tr><td className="p-2 border font-semibold">{currentPartido.nombreEquipoLocal}</td>{[...Array(maxInnings)].map((_,i)=><td key={i} className="p-2 border text-center">{localStats.runsPerInning[i+1]??'-'}</td>)}<td className="p-2 border text-center font-bold">{localStats.totalRuns}</td><td className="p-2 border text-center">{localStats.hits}</td><td className="p-2 border text-center">{localStats.errors}</td></tr></tbody></table></div>
+      <div className="bg-white p-4 shadow rounded-lg"><h2 className="text-xl font-semibold mb-2 text-center">Estado del Juego</h2><div className="grid grid-cols-2 gap-4 text-center items-center mb-2"><div><p className="text-sm text-gray-500">Inning</p><p className="text-2xl font-bold">{gameStatus.actualInningNumber} ({gameStatus.currentHalfInning==='Top'?'⬆️':'⬇️'})</p></div><div><p className="text-sm text-gray-500">Outs</p><p className="text-2xl font-bold">{gameStatus.outs}</p></div></div><div className="flex flex-col items-center justify-center my-1"><BaseballDiamondSVG bases={gameStatus.bases} className="w-64 h-64 sm:w-80 sm:h-80 md:w-96 md:h-96" onBaseClick={handleBaseClick} disabled={gamePhase==='ended'}/></div>
+      <div className="my-2 space-y-1">
+        {currentBatterDisplay ? (
+          <div className="flex items-center justify-center gap-x-2 p-2">
+            {gamePhase !== 'ended' && (
+              <Button onClick={() => openPlayModal(currentBatterDisplay, false)} variant="success" size="md" className="flex items-center flex-shrink-0 px-3 py-2" disabled={!currentBatterDisplay || currentBatterDisplay.posicion === 'BE' || currentBatterDisplay.posicion === EMPTY_POSICION_PLACEHOLDER}>
+                <SaveIcon className="h-4 w-4 mr-1"/> Anotar Jugada para {currentBatterDisplay.nombreJugador}
+              </Button>
+            )}
+          </div>
+        ) : (
+          <p className="text-center text-gray-600 font-semibold p-2">Seleccione un bateador de la lista para anotar o cambie de entrada.</p>
+        )}
       </div>
+      <div className="mt-4 flex flex-wrap gap-2 justify-center"><Button onClick={()=>setIsBoxScoreModalOpen(true)} variant="secondary" size="sm" className="px-3 py-1 flex items-center" disabled={!currentPartido}><MdOutlineLeaderboard className="mr-1 h-4 w-4"/> Box Score</Button><Button onClick={handleUndoLastAnnotation} variant="warning" size="sm" className="px-3 py-1 flex items-center" disabled={partidoHistoryStack.length === 0 || gamePhase === 'ended'}><MdUndo className="mr-1 h-4 w-4"/> Retroceder Anotación</Button></div></div>
       
-      <div className="flex flex-col lg:flex-row gap-6">
-        {/* Left Side: Diamond and Game Log */}
-        <div className="lg:w-2/3 space-y-4">
-            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-md">
-                <h3 className="text-lg font-semibold mb-2 text-gray-700 dark:text-gray-200">
-                    Al Bate: {currentBatter?.nombreJugador || 'N/A'} ({currentBatter?.posicion || 'N/A'})
-                </h3>
-                <BaseballDiamondSVG bases={currentPartido.gameStatus.bases} onBaseClick={handleBaseClick} disabled={gamePhase === 'ended'} />
+      <div className="bg-white shadow rounded-lg">
+          <div className="p-4 border-b border-gray-200">
+            <div className="flex justify-center items-center space-x-4 mb-3">
+                <IconButton 
+                    icon={<MdNavigateBefore size={24}/>} 
+                    onClick={handlePreviousInningLineup} 
+                    disabled={inningToShowInLineups <= 1}
+                    label="Inning Anterior en Lineup"
+                    className="p-2 border rounded hover:bg-gray-100 disabled:opacity-50"
+                />
+                <span className="text-md font-medium text-gray-700">Mostrando Actuación del Inning: {inningToShowInLineups}</span>
+                <IconButton 
+                    icon={<MdNavigateNext size={24}/>} 
+                    onClick={handleNextInningLineup} 
+                    disabled={inningToShowInLineups >= currentPartido.gameStatus.actualInningNumber && currentPartido.gameStatus.currentHalfInning === 'Top' && currentPartido.gameStatus.outs === 0 && currentPartido.gameStatus.actualInningNumber > 1}
+                    label="Siguiente Inning en Lineup"
+                    className="p-2 border rounded hover:bg-gray-100 disabled:opacity-50"
+                />
             </div>
-            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-md">
-                <button onClick={() => setIsGameLogExpanded(!isGameLogExpanded)} className="w-full text-left text-xl font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 flex justify-between items-center rounded-t-lg p-2 -m-2 mb-2" aria-expanded={isGameLogExpanded}>
-                    Registro de Jugadas ({currentPartido.registrosJuego.length})
-                    <svg className={`w-6 h-6 transform transition-transform duration-200 ${isGameLogExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                </button>
-                {isGameLogExpanded && (
-                    <div className="mt-2 max-h-96 overflow-y-auto">
-                        <Table columns={gameLogTableColumns} data={[...currentPartido.registrosJuego].reverse()} />
-                    </div>
-                )}
-            </div>
-        </div>
-        {/* Right Side: Lineups and Actions */}
-        <div className="lg:w-1/3 space-y-4">
-          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-md">
-            <h3 className="text-lg font-semibold mb-2 text-gray-700 dark:text-gray-200">Anotación y Controles</h3>
-            <div className="grid grid-cols-2 gap-2">
-                <Button onClick={handleUndoLastPlay} disabled={partidoHistoryStack.length === 0 || gamePhase === 'ended'} variant="warning"><MdUndo className="inline mr-1" /> Deshacer</Button>
-                <Button onClick={() => setIsBoxScoreModalOpen(true)} variant="info"><MdOutlineLeaderboard className="inline mr-1" /> Box Score</Button>
-                <Button onClick={handleArchiveGame} variant="secondary"><SaveIcon className="inline mr-1" /> Guardar</Button>
-                {gamePhase === 'ended' ? (
-                   <Button onClick={requestSaveAndEndGame} variant="success">Finalizar y Archivar</Button>
-                ) : (
-                   <Button onClick={requestSaveAndEndGame} variant="success">Finalizar Partido</Button>
-                )}
-                <Button onClick={requestClearGame} variant="danger" className="col-span-2"><MdDeleteForever className="inline mr-1" /> Borrar Partido</Button>
-            </div>
+            <nav className="-mb-px flex space-x-8 justify-center" aria-label="Tabs">
+                <button onClick={()=>setActiveLineupTab('visitante')} className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm ${activeLineupTab==='visitante'?'border-blue-500 text-blue-600':'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Lineup Visitante: {currentPartido.nombreEquipoVisitante}</button>
+                <button onClick={()=>setActiveLineupTab('local')} className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm ${activeLineupTab==='local'?'border-blue-500 text-blue-600':'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Lineup Local: {currentPartido.nombreEquipoLocal}</button>
+            </nav>
           </div>
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md">
-            <div className="flex border-b border-gray-200 dark:border-gray-700">
-                <button onClick={() => setActiveLineupTab('visitante')} className={`flex-1 py-2 px-4 text-sm font-medium ${activeLineupTab === 'visitante' ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400' : 'text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
-                    {currentPartido.nombreEquipoVisitante}
-                </button>
-                <button onClick={() => setActiveLineupTab('local')} className={`flex-1 py-2 px-4 text-sm font-medium ${activeLineupTab === 'local' ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400' : 'text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
-                    {currentPartido.nombreEquipoLocal}
-                </button>
-            </div>
-            <div className="p-2 overflow-x-auto">
-                <Table columns={teamLineupTableColumns.map(col => {
-                    const isCurrentInningCol = typeof col.header === 'string' && parseInt(col.header, 10) === currentPartido.gameStatus.actualInningNumber;
-                    return ({
-                        ...col,
-                        className: `${col.className || ''} ${isCurrentInningCol ? 'bg-blue-50 dark:bg-blue-900/50' : ''}`
-                    })
-                 })} data={lineupForTable.map(p => ({...p, id: p.id}))} />
-            </div>
-          </div>
+          <div className="p-0 sm:p-4 overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                    <tr>
+                        <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-10">#</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jugador</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">Pos.</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actuación Inning {inningToShowInLineups}</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                    {lineupToDisplay.map((player)=>{
+                        const isPlayerTeamAtBat=(gameStatus.currentHalfInning==='Top'&&teamTypeForDisplay==='visitante')||(gameStatus.currentHalfInning==='Bottom'&&teamTypeForDisplay==='local');
+                        const canAnotar=(isPlayerTeamAtBat&&player.posicion!=='BE'&&player.posicion!==EMPTY_POSICION_PLACEHOLDER);
+                        const playsInSelectedInning = player.innings[inningToShowInLineups] || [];
+                        const isCurrentBatter = currentPartido.gameStatus.currentBatterLineupPlayerId === player.id && player.posicion !== 'BE' && player.posicion !== EMPTY_POSICION_PLACEHOLDER;
+                        return (
+                        <tr key={player.id} className={ (player.posicion==='BE' || player.posicion === EMPTY_POSICION_PLACEHOLDER) ? 'bg-gray-100 opacity-70' : (isCurrentBatter ? 'border-l-4 border-blue-500 bg-blue-50' : '')}>
+                            <td className="px-2 py-2 whitespace-nowrap text-sm">{player.ordenBate}</td>
+                            <td className="px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{player.nombreJugador}</td>
+                            <td className="px-3 py-2 whitespace-nowrap text-sm">
+                                <div className="flex items-center">
+                                    <span>{player.posicion || EMPTY_POSICION_LABEL}</span>
+                                    <IconButton
+                                        icon={<EditIcon className="w-4 h-4"/>}
+                                        onClick={() => handleOpenEditPlayerPositionModal(player, teamTypeForDisplay)}
+                                        disabled={gamePhase === 'ended'}
+                                        className="ml-2 p-1 text-xs text-blue-600 hover:text-blue-800"
+                                        label={`Cambiar posición de ${player.nombreJugador}`}
+                                    />
+                                </div>
+                            </td>
+                            <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-600">
+                                {playsInSelectedInning.length > 0 
+                                    ? playsInSelectedInning.map(p => p.playDisplayValue).join(', ') 
+                                    : '-'}
+                            </td>
+                            <td className="px-3 py-2 whitespace-nowrap text-sm space-x-1 flex items-center">
+                                <Button size="sm" variant="light" onClick={()=>openPlayModal(player,false)} disabled={gamePhase==='ended'||!canAnotar} className="py-1 px-2 text-xs">Anotar</Button>
+                            </td>
+                        </tr>);
+                    })}
+                </tbody>
+            </table>
         </div>
       </div>
-       {/* Modals */}
-       <Modal isOpen={isPlayModalOpen} onClose={() => setIsPlayModalOpen(false)} title={`Anotar Jugada para ${currentPlayerForPlay?.nombreJugador}`}>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {jugadasDB.filter(j => j.isActive).map(jugada => (
-                    <Button key={jugada.codigo} onClick={() => handlePlaySelected(jugada)} variant="light" className="flex-col h-16">
-                        <span className="font-bold text-lg">{jugada.jugada}</span>
-                        <span className="text-xs">{jugada.descripcion}</span>
-                    </Button>
-                ))}
+      <div className="bg-white p-4 shadow rounded-lg mt-6 flex flex-wrap gap-2 justify-center"><Button onClick={handleSaveGame} variant="primary">Guardar Progreso</Button><Button onClick={handleExportCurrentPartidoCSV} variant="secondary" disabled={!currentPartido}>Exportar Partido CSV</Button><Button onClick={requestResetPartido} variant="warning" disabled={gamePhase==='ended'}>Reiniciar Partido</Button><Button onClick={requestEndGame} variant="danger">Terminar Partido</Button><Button onClick={()=>navigate('/historial')} variant="secondary">Ver Historial</Button></div>
+      <div className="bg-white p-4 shadow rounded-lg mt-6">
+        <div className="flex justify-between items-center mb-2">
+            <h2 className="text-xl font-semibold">Registro Detallado del Juego</h2>
+            <Button onClick={()=>setIsGameLogExpanded(!isGameLogExpanded)} variant="light" size="sm">{isGameLogExpanded?'Contraer':'Expandir'} Lista</Button>
+        </div>
+        <p className="text-xs text-red-600 mb-2 bg-red-50 p-2 rounded">
+            Nota: Editar o eliminar jugadas pasadas del registro NO recalculará automáticamente las estadísticas del juego ni el estado de las bases posteriores. Estos cambios son solo para corregir el registro. Las jugadas anotadas a través de la opción "Anotar" en la lista de jugadores afectarán el estado del juego (outs, bases, etc.).
+        </p>
+        <div className={`overflow-y-auto transition-all duration-300 ease-in-out ${isGameLogExpanded?'max-h-none':'max-h-[30rem]'}`}>
+            <Table columns={gameLogColumns} data={[...(currentPartido?.registrosJuego||[])].reverse()}/>
+        </div>
+      </div>
+
+      {/* Box Score Modal */}
+      <Modal isOpen={isBoxScoreModalOpen} onClose={()=>setIsBoxScoreModalOpen(false)} title="Box Score" size="xl">
+        {currentPartido && (
+          <div className="text-xs overflow-y-auto max-h-[75vh]">
+            <h3 className="text-lg font-semibold mb-2 text-center">{currentPartido.nombreEquipoVisitante} vs {currentPartido.nombreEquipoLocal}</h3>
+            <div className="overflow-x-auto mb-4">
+              <table className="min-w-full table-auto border-collapse border border-gray-300">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="p-1 border border-gray-300">Equipo</th>
+                    {[...Array(maxInnings)].map((_,i)=><th key={`ls-inn-${i}`} className="p-1 border border-gray-300 w-6 text-center">{i+1}</th>)}
+                    <th className="p-1 border border-gray-300 w-8 text-center">R</th>
+                    <th className="p-1 border border-gray-300 w-8 text-center">H</th>
+                    <th className="p-1 border border-gray-300 w-8 text-center">E</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="p-1 border border-gray-300 font-medium">{currentPartido.nombreEquipoVisitante}</td>
+                    {[...Array(maxInnings)].map((_,i)=><td key={`ls-v-inn-${i}`} className="p-1 border border-gray-300 text-center">{currentPartido.visitanteStats.runsPerInning[i+1]??0}</td>)}
+                    <td className="p-1 border border-gray-300 text-center font-bold">{currentPartido.visitanteStats.totalRuns}</td>
+                    <td className="p-1 border border-gray-300 text-center font-bold">{currentPartido.visitanteStats.hits}</td>
+                    <td className="p-1 border border-gray-300 text-center font-bold">{currentPartido.visitanteStats.errors}</td>
+                  </tr>
+                  <tr>
+                    <td className="p-1 border border-gray-300 font-medium">{currentPartido.nombreEquipoLocal}</td>
+                    {[...Array(maxInnings)].map((_,i)=><td key={`ls-l-inn-${i}`} className="p-1 border border-gray-300 text-center">{currentPartido.localStats.runsPerInning[i+1]??0}</td>)}
+                    <td className="p-1 border border-gray-300 text-center font-bold">{currentPartido.localStats.totalRuns}</td>
+                    <td className="p-1 border border-gray-300 text-center font-bold">{currentPartido.localStats.hits}</td>
+                    <td className="p-1 border border-gray-300 text-center font-bold">{currentPartido.localStats.errors}</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
-       </Modal>
-       {managingRunner && (
-          <Modal isOpen={isRunnerActionModalOpen} onClose={() => setIsRunnerActionModalOpen(false)} title={`Acción para ${managingRunner.player.nombreJugador}`}>
-            <div className="space-y-2">
-                <Button onClick={() => handleRunnerAction('advanceTo2B')} className="w-full" disabled={managingRunner.baseIndex >= 1}>Avanzar a 2B</Button>
-                <Button onClick={() => handleRunnerAction('advanceTo3BFrom2B')} className="w-full" disabled={managingRunner.baseIndex !== 1}>Avanzar a 3B (desde 2B)</Button>
-                <Button onClick={() => handleRunnerAction('advanceTo3BFrom1B')} className="w-full" disabled={managingRunner.baseIndex !== 0}>Avanzar a 3B (desde 1B)</Button>
-                <Button onClick={() => handleRunnerAction('scoreManually')} className="w-full" variant="success">Anotar Carrera</Button>
-                <Button onClick={() => handleRunnerAction('outRunner')} className="w-full" variant="danger">Out Corredor</Button>
+                {['visitante','local'].map(teamType=>{const lineup=teamType==='visitante'?currentPartido.lineupVisitante:currentPartido.lineupLocal; const teamName=teamType==='visitante'?currentPartido.nombreEquipoVisitante:currentPartido.nombreEquipoLocal; const totals=lineup.reduce((acc,p)=>({ab:acc.ab+p.stats.atBats, ap: acc.ap + (p.stats.plateAppearances || 0), r:acc.r+p.stats.runs,h1b:acc.h1b+(p.stats.singles||0),h2b:acc.h2b+(p.stats.doubles||0),h3b:acc.h3b+(p.stats.triples||0),hr:acc.hr+(p.stats.homeRuns||0),rbi:acc.rbi+p.stats.rbi,bb:acc.bb+p.stats.walks,k:acc.k+p.stats.strikeouts}),{ab:0, ap:0, r:0,h1b:0,h2b:0,h3b:0,hr:0,rbi:0,bb:0,k:0}); return (<div key={teamType} className="mb-4"><h4 className="text-md font-semibold mb-1">{teamName} - Bateo</h4><div className="overflow-x-auto"><table className="min-w-full table-auto border-collapse border border-gray-300"><thead><tr className="bg-gray-50"><th className="p-1 border border-gray-300">Jugador</th><th className="p-1 border border-gray-300">Pos</th><th className="p-1 border border-gray-300">AB</th><th className="p-1 border border-gray-300">AP</th><th className="p-1 border border-gray-300">R</th><th className="p-1 border border-gray-300">H1</th><th className="p-1 border border-gray-300">H2</th><th className="p-1 border border-gray-300">H3</th><th className="p-1 border border-gray-300">HR</th><th className="p-1 border border-gray-300">RBI</th><th className="p-1 border border-gray-300">BB</th><th className="p-1 border border-gray-300">K</th></tr></thead><tbody>
+                  {lineup.map(p=>(<tr key={p.id} className={p.posicion==='BE'?'opacity-60':''}><td className="p-1 border border-gray-300">{p.nombreJugador}</td><td className="p-1 border border-gray-300">{p.posicion||'--'}</td><td className="p-1 border border-gray-300 text-center">{p.stats.atBats}</td><td className="p-1 border border-gray-300 text-center">{p.stats.plateAppearances}</td><td className="p-1 border border-gray-300 text-center">{p.stats.runs}</td><td className="p-1 border border-gray-300 text-center">{p.stats.singles||0}</td><td className="p-1 border border-gray-300 text-center">{p.stats.doubles||0}</td><td className="p-1 border border-gray-300 text-center">{p.stats.triples||0}</td><td className="p-1 border border-gray-300 text-center">{p.stats.homeRuns||0}</td><td className="p-1 border border-gray-300 text-center">{p.stats.rbi}</td><td className="p-1 border border-gray-300 text-center">{p.stats.walks}</td><td className="p-1 border border-gray-300 text-center">{p.stats.strikeouts}</td></tr>))}
+                <tr className="font-bold bg-gray-50"><td className="p-1 border border-gray-300">TOTALES</td><td className="p-1 border border-gray-300"></td><td className="p-1 border border-gray-300 text-center">{totals.ab}</td><td className="p-1 border border-gray-300 text-center">{totals.ap}</td><td className="p-1 border border-gray-300 text-center">{totals.r}</td><td className="p-1 border border-gray-300 text-center">{totals.h1b}</td><td className="p-1 border border-gray-300 text-center">{totals.h2b}</td><td className="p-1 border border-gray-300 text-center">{totals.h3b}</td><td className="p-1 border border-gray-300 text-center">{totals.hr}</td><td className="p-1 border border-gray-300 text-center">{totals.rbi}</td><td className="p-1 border border-gray-300 text-center">{totals.bb}</td><td className="p-1 border border-gray-300 text-center">{totals.k}</td></tr></tbody></table></div></div>);
+              })}
+            <div className="flex justify-between items-center pt-2">
+                <Button 
+                    onClick={handleExportBoxScoreCSV} 
+                    variant="success" 
+                    size="sm"
+                    className="flex items-center"
+                    disabled={!currentPartido}
+                >
+                    <MdOutlineFileDownload className="mr-1.5 h-4 w-4"/>
+                    Exportar Box Score (CSV)
+                </Button>
+                <Button onClick={()=>setIsBoxScoreModalOpen(false)} size="sm">Volver al Partido</Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Play Modal */}
+      <Modal isOpen={isPlayModalOpen} onClose={()=>setIsPlayModalOpen(false)} title={`Anotar Jugada para ${currentPlayerForPlay?.nombreJugador||'Jugador'} ${isFreeEditModeForModal?'(Modo Edición Libre)':''}`} size="xl"><div className="space-y-3 max-h-[70vh] overflow-y-auto">{playCategoryOrder.map(category=>(groupedPlays[category]&&groupedPlays[category].length>0&&(<div key={category}><h3 className="text-lg font-semibold my-2 text-gray-700 border-b pb-1">{category}</h3><div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">{groupedPlays[category].map(jugada=>(<Button key={jugada.jugada} variant={playCategoryColors[jugada.category]||"secondary"} onClick={()=>handlePlaySelected(jugada)} className="w-full text-left p-2 h-auto text-sm leading-tight flex flex-col items-start"><span className="font-semibold">{jugada.jugada}</span><span className="text-xs">{jugada.descripcion}</span></Button>))}</div></div>)))}</div></Modal>
+      {isConfirmActionModalOpen && confirmActionModalProps && ( <ConfirmationModal isOpen={isConfirmActionModalOpen} onClose={()=>setIsConfirmActionModalOpen(false)} title={confirmActionModalProps.title} message={confirmActionModalProps.message} onConfirm={confirmActionModalProps.onConfirm} confirmButtonText={confirmActionModalProps.confirmButtonText} confirmButtonVariant={confirmActionModalProps.confirmButtonVariant}/>)}
+      {isRunnerActionModalOpen && managingRunner && currentPartido && ( <Modal isOpen={isRunnerActionModalOpen} onClose={()=>setIsRunnerActionModalOpen(false)} title={`Acciones para ${managingRunner.player.nombreJugador} en ${getBaseLabel(managingRunner.baseIndex+1)}`} size="sm"> <div className="space-y-2"> <Button onClick={()=>handleRunnerAction('scoreWithSpecificReason')} variant="success" className="w-full">Anotar Carrera</Button> {managingRunner.baseIndex < 2 && <Button onClick={()=>handleRunnerAction(managingRunner.baseIndex===0?'advanceTo2B':'advanceTo3BFrom2B')} variant="info" className="w-full">Avanzar a {getBaseLabel(managingRunner.baseIndex+2)}</Button>} {managingRunner.baseIndex === 0 && <Button onClick={()=>handleRunnerAction('advanceTo3BFrom1B')} variant="info" className="w-full">Avanzar a {getBaseLabel(managingRunner.baseIndex+3)}</Button>} <Button onClick={()=>handleRunnerAction('outRunner')} variant="danger" className="w-full">Poner Out al Corredor</Button> </div> </Modal> )}
+      {assignRbiModalState.isOpen && assignRbiModalState.scoringPlayerInfo && currentPartido && ( <AssignRbiModal isOpen={assignRbiModalState.isOpen} onClose={()=>setAssignRbiModalState({isOpen:false,scoringPlayerInfo:null,batterForRbiContext:null,previousBatterForRbiContext:null})} onConfirm={handleConfirmRbiAssignment} scoringPlayerInfo={assignRbiModalState.scoringPlayerInfo} batterForRbiContext={assignRbiModalState.batterForRbiContext} previousBatterForRbiContext={assignRbiModalState.previousBatterForRbiContext}/> )}
+      {errorModalContext && currentPartido && ( <ErrorAdvancementModal isOpen={isErrorModalOpen} onClose={()=>{setIsErrorModalOpen(false);setErrorModalContext(null);}} onConfirm={handleErrorAdvancementConfirm} batterName={errorModalContext.batterLineupPlayer.nombreJugador} defensiveTeamLineup={currentPartido.gameStatus.currentHalfInning==='Top'?currentPartido.lineupLocal:currentPartido.lineupVisitante} defensiveTeamName={currentPartido.gameStatus.currentHalfInning==='Top'?currentPartido.nombreEquipoLocal:currentPartido.nombreEquipoVisitante} /> )}
+      {isDoublePlayModalOpen && doublePlayContext && currentPartido && ( <DoublePlayOutSelectionModal isOpen={isDoublePlayModalOpen} onClose={()=>{setIsDoublePlayModalOpen(false);setDoublePlayContext(null);}} onConfirm={doublePlayContext.onConfirm} playersInvolved={[doublePlayContext.batter,...doublePlayContext.runners]} teamName={currentPartido.gameStatus.currentHalfInning==='Top'?currentPartido.nombreEquipoVisitante:currentPartido.nombreEquipoLocal} /> )}
+      {isTriplePlayModalOpen && triplePlayContext && currentPartido && (
+        <TriplePlayOutSelectionModal
+            isOpen={isTriplePlayModalOpen}
+            onClose={() => { setIsTriplePlayModalOpen(false); setTriplePlayContext(null); }}
+            onConfirm={triplePlayContext.onConfirm}
+            playersInvolved={[triplePlayContext.batter, ...triplePlayContext.runners]}
+            teamName={
+                currentPartido.gameStatus.currentHalfInning === 'Top'
+                ? currentPartido.nombreEquipoVisitante
+                : currentPartido.nombreEquipoLocal
+            }
+        />
+      )}
+      {runnerAdvancementContext && currentPartido && ( <RunnerAdvancementReasonModal isOpen={isRunnerAdvancementReasonModalOpen} onClose={()=>{setIsRunnerAdvancementReasonModalOpen(false);setRunnerAdvancementContext(null);}} onConfirm={handleRunnerAdvancementReasonConfirm} runner={runnerAdvancementContext.runner} defensiveTeamLineup={currentPartido.gameStatus.currentHalfInning === 'Top' ? currentPartido.lineupLocal : currentPartido.lineupVisitante} defensiveTeamName={currentPartido.gameStatus.currentHalfInning === 'Top' ? currentPartido.nombreEquipoLocal : currentPartido.nombreEquipoVisitante} isScoringAttempt={runnerAdvancementContext.baseIndexAdvancedTo===3} /> )}
+      {isRunnerOutSpecificReasonModalOpen && managingRunner && ( <RunnerOutSpecificReasonModal isOpen={isRunnerOutSpecificReasonModalOpen} onClose={()=>{setIsRunnerOutSpecificReasonModalOpen(false);setManagingRunner(null);}} onConfirm={handleRunnerOutSpecificReasonConfirm} runnerName={managingRunner.player.nombreJugador} baseBeingRunFrom={getBaseLabel(managingRunner.baseIndex+1)} /> )}
+      {runnerAdvancementAfterHitModalState.isOpen && runnerAdvancementAfterHitModalState.batter && currentPartido && ( <RunnerAdvancementAfterHitModal isOpen={runnerAdvancementAfterHitModalState.isOpen} onClose={()=>setRunnerAdvancementAfterHitModalState(prev=>({...prev,isOpen:false}))} batter={runnerAdvancementAfterHitModalState.batter} hitType={runnerAdvancementAfterHitModalState.hitType!} batterReachedBase={runnerAdvancementAfterHitModalState.batterReachedBase} runnersOnBase={runnerAdvancementAfterHitModalState.runnersOnBase} initialAdvancements={runnerAdvancementAfterHitModalState.advancements} onConfirm={handleConfirmRunnerAdvancementsFromHitModal} /> )}
+      {runnerAdvancementAfterSacrificeModalState.isOpen && runnerAdvancementAfterSacrificeModalState.batter && currentPartido && ( <RunnerAdvancementAfterSacrificeModal isOpen={runnerAdvancementAfterSacrificeModalState.isOpen} onClose={()=>setRunnerAdvancementAfterSacrificeModalState(prev => ({...prev,isOpen:false}))} batter={runnerAdvancementAfterSacrificeModalState.batter} sacrificeType={runnerAdvancementAfterSacrificeModalState.sacrificeType!} runnersOnBase={runnerAdvancementAfterSacrificeModalState.runnersOnBase} initialAdvancements={runnerAdvancementAfterSacrificeModalState.advancements} initialOuts={runnerAdvancementAfterSacrificeModalState.initialOuts} onConfirm={handleConfirmRunnerAdvancementsFromSacrificeModal} /> )}
+      {runnerAdvancementAfterErrorModalState.isOpen && runnerAdvancementAfterErrorModalState.batterWhoReachedOnError && currentPartido && (
+        <RunnerAdvancementAfterErrorModal
+            isOpen={runnerAdvancementAfterErrorModalState.isOpen}
+            onClose={()=>{setIsErrorModalOpen(false); setErrorModalContext(null); setRunnerAdvancementAfterErrorModalState(prev=>({...prev, isOpen:false}))}}
+            batterWhoReachedOnError={runnerAdvancementAfterErrorModalState.batterWhoReachedOnError}
+            batterFinalDestBaseOnError={runnerAdvancementAfterErrorModalState.batterFinalDestBaseOnError}
+            runnersOnBaseAtTimeOfError={runnerAdvancementAfterErrorModalState.runnersOnBaseAtTimeOfError}
+            fielderWhoCommittedError={runnerAdvancementAfterErrorModalState.fielderWhoCommittedError}
+            onConfirm={handleConfirmRunnerAdvancementsFromErrorModal}
+        />
+      )}
+      {isEditRegistroModalOpen && editingRegistro && (
+        <Modal isOpen={isEditRegistroModalOpen} onClose={handleCloseEditRegistroModal} title={`Editar Registro de Jugada #${editingRegistro.id.substring(0,6)}`} size="lg">
+            <p className="text-sm mb-2">Bateador: <span className="font-semibold">{editingRegistro.bateadorNombre}</span></p>
+            <p className="text-sm mb-2">Jugada Original: <span className="font-semibold">{getOriginalJugadaDescription(editingRegistro.jugadaId, editingRegistro.descripcion)} ({editingRegistro.jugadaId})</span></p>
+            <p className="text-xs text-red-500 bg-red-100 p-2 rounded mb-3">Advertencia: Cambiar la jugada aquí solo actualiza el texto del log. No recalcula estadísticas, outs, ni movimiento de bases.</p>
+            <Select
+                label="Nueva Jugada (Solo para el log):"
+                options={jugadasDB.map(j => ({value: j.jugada, label: `${j.descripcion} (${j.jugada})`}))}
+                value={tempEditedPlayIdInModal}
+                onChange={(e) => setTempEditedPlayIdInModal(e.target.value)}
+            />
+            <div className="mt-4 flex justify-end space-x-2">
+                <Button variant="light" onClick={handleCloseEditRegistroModal}>Cancelar</Button>
+                <Button variant="success" onClick={() => {
+                    const selected = jugadasDB.find(j => j.jugada === tempEditedPlayIdInModal);
+                    if(selected) handleSaveEditedRegistro(selected);
+                }}>Guardar Solo Texto del Log</Button>
+            </div>
+        </Modal>
+      )}
+      {isPositionConflictModalOpen && positionConflictDetails && (
+          <Modal isOpen={isPositionConflictModalOpen} onClose={handleClosePositionConflictModal} title="Conflicto de Posición">
+            <p>La posición <strong>{positionConflictDetails.targetPosition}</strong> ya está ocupada por <strong>{positionConflictDetails.existingPlayerInTargetPosition.nombreJugador}</strong>.</p>
+            <p>¿Desea asignar a <strong>{positionConflictDetails.conflictingPlayer.nombreJugador}</strong> a la posición <strong>{positionConflictDetails.targetPosition}</strong>? Esto moverá a <strong>{positionConflictDetails.existingPlayerInTargetPosition.nombreJugador}</strong> a la Banca (BE).</p>
+            <div className="flex justify-end space-x-2 pt-3">
+              <Button variant="light" onClick={() => handleResolvePositionConflict(false)}>Cancelar</Button>
+              <Button variant="warning" onClick={() => handleResolvePositionConflict(true)}>Confirmar y Mover a Banca</Button>
             </div>
           </Modal>
-       )}
-       {isRunnerOutSpecificReasonModalOpen && managingRunner && (
-           <RunnerOutSpecificReasonModal
-             isOpen={isRunnerOutSpecificReasonModalOpen}
-             onClose={() => setIsRunnerOutSpecificReasonModalOpen(false)}
-             onConfirm={handleRunnerOutSpecificReasonConfirm}
-             runnerName={managingRunner.player.nombreJugador}
-             baseBeingRunFrom={getBaseLabel(managingRunner.baseIndex + 1)}
-           />
-       )}
-        {errorModalContext && (
-            <ErrorAdvancementModal
-                isOpen={isErrorModalOpen}
-                onClose={() => { setIsErrorModalOpen(false); setErrorModalContext(null); }}
-                onConfirm={handleErrorAdvancementConfirm}
-                batterName={errorModalContext.batterLineupPlayer.nombreJugador}
-                defensiveTeamLineup={currentPartido.gameStatus.currentHalfInning === 'Top' ? currentPartido.lineupLocal : currentPartido.lineupVisitante}
-                defensiveTeamName={currentPartido.gameStatus.currentHalfInning === 'Top' ? currentPartido.nombreEquipoLocal : currentPartido.nombreEquipoVisitante}
-            />
-        )}
-        {doublePlayContext && (
-            <DoublePlayOutSelectionModal
-                isOpen={isDoublePlayModalOpen}
-                onClose={() => setIsDoublePlayModalOpen(false)}
-                onConfirm={doublePlayContext.onConfirm}
-                playersInvolved={[doublePlayContext.batter, ...doublePlayContext.runners]}
-                teamName={currentPartido.gameStatus.currentHalfInning === 'Top' ? currentPartido.nombreEquipoVisitante : currentPartido.nombreEquipoLocal}
-            />
-        )}
-        {triplePlayContext && (
-             <TriplePlayOutSelectionModal
-                isOpen={isTriplePlayModalOpen}
-                onClose={() => setIsTriplePlayModalOpen(false)}
-                onConfirm={triplePlayContext.onConfirm}
-                playersInvolved={[triplePlayContext.batter, ...triplePlayContext.runners]}
-                teamName={currentPartido.gameStatus.currentHalfInning === 'Top' ? currentPartido.nombreEquipoVisitante : currentPartido.nombreEquipoLocal}
-            />
-        )}
-        {runnerAdvancementContext && (
-            <RunnerAdvancementReasonModal
-                isOpen={isRunnerAdvancementReasonModalOpen}
-                onClose={() => setIsRunnerAdvancementReasonModalOpen(false)}
-                onConfirm={runnerAdvancementContext.onConfirm}
-                runner={runnerAdvancementContext.runner}
-                defensiveTeamLineup={currentPartido.gameStatus.currentHalfInning === 'Top' ? currentPartido.lineupLocal : currentPartido.lineupVisitante}
-                defensiveTeamName={currentPartido.gameStatus.currentHalfInning === 'Top' ? currentPartido.nombreEquipoLocal : currentPartido.nombreEquipoVisitante}
-                isScoringAttempt={runnerAdvancementContext.baseIndexAdvancedTo === 3}
-            />
-        )}
-       {assignRbiModalState.isOpen && assignRbiModalState.scoringPlayerInfo && (
-          <AssignRbiModal
-              isOpen={assignRbiModalState.isOpen}
-              onClose={() => setAssignRbiModalState({ isOpen: false, scoringPlayerInfo: null, batterForRbiContext: null, previousBatterForRbiContext: null })}
-              onConfirm={handleConfirmRbiAssignment}
-              scoringPlayerInfo={assignRbiModalState.scoringPlayerInfo}
-              batterForRbiContext={assignRbiModalState.batterForRbiContext}
-              previousBatterForRbiContext={assignRbiModalState.previousBatterForRbiContext}
-          />
-       )}
-       {runnerAdvancementAfterHitModalState.isOpen && runnerAdvancementAfterHitModalState.batter && runnerAdvancementAfterHitModalState.hitType && (
-           <RunnerAdvancementAfterHitModal
-             isOpen={runnerAdvancementAfterHitModalState.isOpen}
-             onClose={() => setRunnerAdvancementAfterHitModalState(prev => ({...prev, isOpen: false}))}
-             batter={runnerAdvancementAfterHitModalState.batter}
-             hitType={runnerAdvancementAfterHitModalState.hitType}
-             batterReachedBase={runnerAdvancementAfterHitModalState.batterReachedBase}
-             runnersOnBase={runnerAdvancementAfterHitModalState.runnersOnBase}
-             initialAdvancements={runnerAdvancementAfterHitModalState.advancements}
-             onConfirm={() => {/* Complex logic needed here */}}
-           />
-       )}
-       {runnerAdvancementAfterSacrificeModalState.isOpen && runnerAdvancementAfterSacrificeModalState.batter && runnerAdvancementAfterSacrificeModalState.sacrificeType && (
-            <RunnerAdvancementAfterSacrificeModal
-                isOpen={runnerAdvancementAfterSacrificeModalState.isOpen}
-                onClose={() => setRunnerAdvancementAfterSacrificeModalState(prev => ({...prev, isOpen: false}))}
-                batter={runnerAdvancementAfterSacrificeModalState.batter}
-                sacrificeType={runnerAdvancementAfterSacrificeModalState.sacrificeType}
-                runnersOnBase={runnerAdvancementAfterSacrificeModalState.runnersOnBase}
-                initialAdvancements={runnerAdvancementAfterSacrificeModalState.advancements}
-                initialOuts={runnerAdvancementAfterSacrificeModalState.initialOuts}
-                onConfirm={() => {/* Complex logic needed here */}}
-            />
-       )}
-       {runnerAdvancementAfterErrorModalState.isOpen && runnerAdvancementAfterErrorModalState.batterWhoReachedOnError && (
-          <RunnerAdvancementAfterErrorModal
-              isOpen={runnerAdvancementAfterErrorModalState.isOpen}
-              onClose={() => setRunnerAdvancementAfterErrorModalState(prev => ({...prev, isOpen: false}))}
-              batterWhoReachedOnError={runnerAdvancementAfterErrorModalState.batterWhoReachedOnError}
-              batterFinalDestBaseOnError={runnerAdvancementAfterErrorModalState.batterFinalDestBaseOnError}
-              runnersOnBaseAtTimeOfError={runnerAdvancementAfterErrorModalState.runnersOnBaseAtTimeOfError}
-              fielderWhoCommittedError={runnerAdvancementAfterErrorModalState.fielderWhoCommittedError}
-              onConfirm={() => {/* Complex logic needed here */}}
-          />
-       )}
-       {fielderChoiceModalState.isOpen && fielderChoiceModalState.batter && (
-           <FielderChoiceOutcomeModal
-               isOpen={fielderChoiceModalState.isOpen}
-               onClose={() => setFielderChoiceModalState(prev => ({...prev, isOpen: false}))}
-               batter={fielderChoiceModalState.batter}
-               runnersOnBase={fielderChoiceModalState.runnersOnBase}
-               initialOuts={fielderChoiceModalState.initialOuts}
-               onConfirm={() => {/* Complex logic needed here */}}
-           />
-       )}
-        {confirmActionModalProps && (
-           <ConfirmationModal
-             isOpen={isConfirmActionModalOpen}
-             onClose={() => setIsConfirmActionModalOpen(false)}
-             onConfirm={() => { confirmActionModalProps.onConfirm(); setIsConfirmActionModalOpen(false); }}
-             title={confirmActionModalProps.title}
-             message={confirmActionModalProps.message}
-             confirmButtonText={confirmActionModalProps.confirmButtonText}
-             confirmButtonVariant={confirmActionModalProps.confirmButtonVariant}
-           />
-       )}
-       {editingPlayerForPosition && (
-          <PositionSelectionModal
-            isOpen={isEditPlayerPositionModalOpen}
-            onClose={() => setIsEditPlayerPositionModalOpen(false)}
-            onConfirm={handleConfirmPlayerPositionChange}
-            currentPlayerName={editingPlayerForPosition.player.nombreJugador}
-            currentPosition={editingPlayerForPosition.player.posicion}
-            teamLineup={editingPlayerForPosition.team === 'visitante' ? currentPartido.lineupVisitante : currentPartido.lineupLocal}
-            teamName={editingPlayerForPosition.team === 'visitante' ? currentPartido.nombreEquipoVisitante : currentPartido.nombreEquipoLocal}
-          />
-       )}
+      )}
+       {isEditPlayerPositionModalOpen && editingPlayerForPosition && currentPartido && (
+        <PositionSelectionModal
+          isOpen={isEditPlayerPositionModalOpen}
+          onClose={() => {setIsEditPlayerPositionModalOpen(false); setEditingPlayerForPosition(null);}}
+          onConfirm={handleConfirmPlayerPositionChange}
+          currentPlayerName={editingPlayerForPosition.player.nombreJugador}
+          currentPosition={editingPlayerForPosition.player.posicion}
+          teamLineup={editingPlayerForPosition.team === 'visitante' ? currentPartido.lineupVisitante : currentPartido.lineupLocal}
+          teamName={editingPlayerForPosition.team === 'visitante' ? currentPartido.nombreEquipoVisitante : currentPartido.nombreEquipoLocal}
+        />
+      )}
+      {fielderChoiceModalState.isOpen && fielderChoiceModalState.batter && currentPartido && (
+         <FielderChoiceOutcomeModal 
+            isOpen={fielderChoiceModalState.isOpen}
+            onClose={() => setFielderChoiceModalState({ isOpen: false, batter: null, runnersOnBase: [], initialOuts: 0 })}
+            batter={fielderChoiceModalState.batter!}
+            runnersOnBase={fielderChoiceModalState.runnersOnBase}
+            initialOuts={fielderChoiceModalState.initialOuts}
+            onConfirm={handleConfirmFielderChoice}
+        />
+      )}
     </div>
   );
 };
