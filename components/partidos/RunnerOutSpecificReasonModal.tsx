@@ -1,9 +1,7 @@
-
 import React, { useState, useEffect } from 'react';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
-
-export type RunnerOutReason = 'CS' | 'PK' | 'OTHER_OUT';
+import { RunnerOutReason } from '../../types';
 
 interface RunnerOutSpecificReasonModalProps {
   isOpen: boolean;

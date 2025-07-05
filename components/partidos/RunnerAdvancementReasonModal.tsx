@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
@@ -48,8 +49,8 @@ const RunnerAdvancementReasonModal: React.FC<RunnerAdvancementReasonModalProps> 
     { value: RunnerAdvancementReason.STOLEN_BASE, label: `Base Robada ${isScoringAttempt ? ' (Robo de Home)' : ''} (SB)` },
     { value: RunnerAdvancementReason.WILD_PITCH, label: 'Wild Pitch (WP)' },
     { value: RunnerAdvancementReason.PASSED_BALL, label: 'Passed Ball (PB)' },
-    { value: RunnerAdvancementReason.DEFENSIVE_INDIFFERENCE, label: 'Indiferencia Defensiva (DI)' },
-    { value: RunnerAdvancementReason.ERROR_ADVANCE, label: `Avance por Error Defensivo (AE)${isScoringAttempt ? ' que permite anotar' : ''}` },
+    { value: RunnerAdvancementReason.DEFENSIVE_INDIFFERENCE, label: `Indiferencia Defensiva (${RunnerAdvancementReason.DEFENSIVE_INDIFFERENCE})` },
+    { value: RunnerAdvancementReason.ERROR_ADVANCE, label: `Avance por Error Defensivo (${RunnerAdvancementReason.ERROR_ADVANCE})${isScoringAttempt ? ' que permite anotar' : ''}` },
     // Add OB and BK from constants if available
     ...(defaultJugadas.find(j => j.jugada === 'OB') ? [{ value: 'OB', label: 'Obstrucción (OB)' }] : []),
     ...(defaultJugadas.find(j => j.jugada === 'BK') ? [{ value: 'BK', label: 'Balk (BK)' }] : []),

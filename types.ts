@@ -1,4 +1,8 @@
 
+
+
+
+
 export interface Jugador {
   codigo: number;
   nombre: string;
@@ -84,6 +88,7 @@ export interface PlayerOnBase {
   jugadorId: number; // from Jugador.codigo for easy lookup
   nombreJugador: string; // for display
   reachedOnJugadaId?: string; // jugadaId of how they got to first initially in this sequence of reaching base
+  reachedOnPlayInstanceId?: string;
 }
 
 export interface LastPlayContext {
@@ -121,34 +126,34 @@ export enum RunnerAdvancementReason {
   STOLEN_BASE = 'SB', // Base Robada
   WILD_PITCH = 'WP',   // Wild Pitch
   PASSED_BALL = 'PB',  // Passed Ball
-  DEFENSIVE_INDIFFERENCE = 'DI', // Indiferencia Defensiva
-  ERROR_ADVANCE = 'EA', // Avance por Error (no anota carrera)
+  DEFENSIVE_INDIFFERENCE = 'ID', // Indiferencia Defensiva
+  ERROR_ADVANCE = 'AE', // Avance por Error (no anota carrera)
   OTHER = 'OTRO' // Otro motivo no especificado
 }
 
+export type RunnerOutReason = 'CS' | 'PK' | 'OTHER_OUT';
+
 export interface RegistroJuego {
-  id: string; // uuid
+  id: string;
   timestamp: number;
   inning: number;
   halfInning: 'Top' | 'Bottom';
-  bateadorId: string; // LineupPlayer.id
-  bateadorNombre: string; // Name of the batter at the time of play
-  bateadorPosicion: string; // Position of the batter at the time of play
-  pitcherResponsableId: string | null; // LineupPlayer.id of the opposing pitcher
-  pitcherResponsableNombre: string | null; // Name of the opposing pitcher
-  equipoBateadorNombre: string; // Name of the team at bat
-  jugadaId: string; // Jugada.jugada (código corto)
-  descripcion: string; // Descripción de la jugada
+  bateadorId: string;
+  bateadorNombre: string;
+  bateadorPosicion: string;
+  pitcherResponsableId: string | null;
+  pitcherResponsableNombre: string | null;
+  equipoBateadorNombre: string;
+  jugadaId: string;
+  descripcion: string;
+  categoria: string;
   outsPrev: number;
   outsAfter: number;
-  basesPrevState: string; // e.g., "011" for runners on 2B, 3B (1B empty) - simple representation of who was where
-  basesAfterState: string; // e.g., "100" for runner on 1B
-  runScored: number; // Runs scored AS A DIRECT RESULT of this single play event (e.g., HR, bases loaded walk)
-  rbi: number; // RBIs credited to the BATER for this single play event
-  advancementReason?: RunnerAdvancementReason | string; // For manual advancements
-  isUndoMarker?: boolean; // Optional marker for undo actions in the log
-
-  // New fields for detailed game log context
+  basesPrevState: string;
+  basesAfterState: string;
+  runScored: number;
+  rbi: number;
+  advancementReason?: string;
   fechaDelPartido: string;
   formatoDelPartidoDesc: string;
   numeroDelPartido: string;
@@ -232,6 +237,20 @@ export interface PlayerInfoForOutSelection {
   baseNumber?: 1 | 2 | 3; // if runner
 }
 
+export interface DoublePlayResult {
+  outedPlayerIds: [string, string];
+  runnerAdvancements: { [lineupPlayerId: string]: number }; // runner.id -> targetBase (0=OUT, 1-4)
+  batterAdvancement: number; // 0 for OUT, 1-4 for bases
+}
+
+export interface DoublePlayModalState {
+  isOpen: boolean;
+  playersInvolved: PlayerInfoForOutSelection[];
+  initialOuts: number;
+  teamName: string;
+}
+
+
 export interface AssignRbiModalState {
   isOpen: boolean;
   scoringPlayerInfo: PlayerOnBase | null;
@@ -284,6 +303,7 @@ export interface FielderChoiceModalState {
   batter: LineupPlayer | null;
   runnersOnBase: RunnerAdvancementInfo[]; // Runners on base at the time of the FC
   initialOuts: number; // Outs before this FC play began
+  jugada: Jugada | null; // The play that triggered the modal (FC, DP, TP)
   // Propagated from PartidosPage to FielderChoiceOutcomeModal
   // These will be managed internally by the modal and then passed back up
 }
@@ -299,4 +319,13 @@ export interface FielderChoiceResult {
 export interface ErrorModalContext {
     batterLineupPlayer: LineupPlayer;
     initialBasesBeforePlay: [PlayerOnBase | null, PlayerOnBase | null, PlayerOnBase | null];
+}
+
+// New types for Toast Notifications
+export type ToastType = 'info' | 'success' | 'warning' | 'danger';
+
+export interface ToastMessage {
+  id: string;
+  message: string;
+  type: ToastType;
 }

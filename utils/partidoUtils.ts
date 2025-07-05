@@ -1,4 +1,5 @@
 
+
 import { LineupPlayer, BatterStats, GameStatus, PartidoData, AppGlobalConfig, Formato, EMPTY_POSICION_PLACEHOLDER, TeamStats } from '../types';
 
 export const createEmptyBatterStats = (): BatterStats => ({ 
@@ -27,7 +28,7 @@ export const createEmptyGameStatus = (): GameStatus => ({
 });
 
 export const initialPartidoData = (config: AppGlobalConfig, selectedFormato?: Formato): Omit<PartidoData, 'idJuego' | 'lineupVisitante' | 'lineupLocal' | 'visitanteStats' | 'localStats' | 'registrosJuego' | 'gameStatus'> & { gameStatus: GameStatus, lineupVisitante: LineupPlayer[], lineupLocal: LineupPlayer[], visitanteStats: ReturnType<typeof createEmptyTeamStats>, localStats: ReturnType<typeof createEmptyTeamStats>, registrosJuego: [] } => ({
-  fecha: new Date().toISOString().split('T')[0],
+  fecha: '',
   formatoJuegoId: selectedFormato?.codigo || 0,
   numeroJuego: '', 
   nombreEquipoVisitante: config.defaultVisitanteTeamName,
@@ -89,15 +90,19 @@ export const recalculateLineupOrder = (
     
     const processingLineup = [...lineupAfterChange];
 
-    // Assign ordenBate to active players based on their order in the processingLineup (already visually sorted)
-    const activePlayers = processingLineup.filter(p => p.posicion !== 'BE' && p.posicion !== EMPTY_POSICION_PLACEHOLDER);
+    // Get active players and sort them by their existing batting order to maintain it.
+    const activePlayers = processingLineup
+        .filter(p => p.posicion !== 'BE' && p.posicion !== EMPTY_POSICION_PLACEHOLDER)
+        .sort((a, b) => a.ordenBate - b.ordenBate);
+    
     const activePlayersProcessed = activePlayers.map(p => ({ ...p, ordenBate: orderCounter++ }));
     
-    // Bench players can be sorted by their old ordenBate to maintain some stability among them
-    const benchPlayers = processingLineup.filter(p => p.posicion === 'BE' || p.posicion === EMPTY_POSICION_PLACEHOLDER);
-    const benchPlayersProcessed = benchPlayers
-        .sort((a, b) => a.ordenBate - b.ordenBate) 
-        .map(p => ({ ...p, ordenBate: orderCounter++ }));
+    // Get bench players and sort them by their existing batting order to maintain stability.
+    const benchPlayers = processingLineup
+        .filter(p => p.posicion === 'BE' || p.posicion === EMPTY_POSICION_PLACEHOLDER)
+        .sort((a, b) => a.ordenBate - b.ordenBate);
+        
+    const benchPlayersProcessed = benchPlayers.map(p => ({ ...p, ordenBate: orderCounter++ }));
 
     const newSortedLineup = [...activePlayersProcessed, ...benchPlayersProcessed];
 

@@ -1,3 +1,4 @@
+
 import React from 'react';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
@@ -52,26 +53,25 @@ const PositionSelectionModal: React.FC<PositionSelectionModalProps> = ({
         <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-[60vh] overflow-y-auto p-1">
           {allDisplayPositions.map(pos => {
             const occupierName = getOccupiedByPlayerName(pos.value);
-            const isPlayerBeingEditedBE = currentPosition === 'BE';
+            const isPlayerBeingEditedOnBenchOrNew = currentPosition === 'BE' || currentPosition === EMPTY_POSICION_PLACEHOLDER;
             const isThisPosUniqueAndOccupiedByOther = uniqueFieldPositions.includes(pos.value) && !!occupierName;
             
-            // Disable button if:
-            // 1. The position is a unique field position, AND
-            // 2. It's occupied by another player, AND
-            // 3. The player currently being edited is NOT from the Bench ('BE').
-            // (BE players can select occupied unique field positions to initiate a swap)
-            const isDisabled = isThisPosUniqueAndOccupiedByOther && !isPlayerBeingEditedBE;
+            // A player from the bench can select an occupied position to initiate a swap.
+            // A player already on the field cannot move to a position occupied by someone else.
+            const isDisabled = isThisPosUniqueAndOccupiedByOther && !isPlayerBeingEditedOnBenchOrNew;
             
             return (
               <Button
                 key={pos.value}
                 onClick={() => onConfirm(pos.value)}
                 variant={currentPosition === pos.value ? 'primary' : (isDisabled ? 'custom' : 'light')}
-                className={`w-full text-sm py-2 ${isDisabled ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : (isThisPosUniqueAndOccupiedByOther && isPlayerBeingEditedBE ? 'bg-yellow-200 hover:bg-yellow-300' : '')}`}
+                className={`w-full text-sm py-2 h-auto flex flex-col justify-center items-center
+                  ${isDisabled ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 
+                  (isThisPosUniqueAndOccupiedByOther && isPlayerBeingEditedOnBenchOrNew ? 'bg-yellow-200 hover:bg-yellow-300' : '')}`}
                 disabled={isDisabled}
-                title={isDisabled ? `Ocupada por ${occupierName}` : (isThisPosUniqueAndOccupiedByOther && isPlayerBeingEditedBE ? `Mover a ${pos.label} (intercambia con ${occupierName})` :`Asignar ${pos.label}`)}
+                title={isDisabled ? `Ocupada por ${occupierName}` : (isThisPosUniqueAndOccupiedByOther && isPlayerBeingEditedOnBenchOrNew ? `Mover a ${pos.label} (intercambia con ${occupierName})` :`Asignar ${pos.label}`)}
               >
-                {pos.label}
+                <span className="font-bold">{pos.label}</span>
                 {isThisPosUniqueAndOccupiedByOther && <span className="block text-xs truncate">({occupierName})</span>}
               </Button>
             );

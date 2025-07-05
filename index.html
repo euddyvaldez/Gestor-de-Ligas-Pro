@@ -6,6 +6,17 @@
   <link rel="icon" type="image/svg+xml" href="/vite.svg" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Gestor de Ligas</title>
+  <script>
+    // Configure Tailwind to use system fonts and avoid network requests for web fonts.
+    tailwind.config = {
+      theme: {
+        fontFamily: {
+          sans: ['system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'Noto Sans', 'Liberation Sans', 'sans-serif', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji'],
+          mono: ['SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', '"Liberation Mono"', '"Courier New"', 'monospace'],
+        },
+      },
+    }
+  </script>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     :root {

@@ -1,4 +1,5 @@
 
+
 import { PlayCategory, Jugada, Formato } from './types';
 
 export const APP_CONFIG_KEY = 'baseballAppConfig';
@@ -12,14 +13,6 @@ export const FORMATOS_STORAGE_KEY = 'baseball_formatos';
 export const CODIGO_ACTUAL_FORMATOS_STORAGE_KEY = 'baseball_codigo_actual_formatos';
 export const PARTIDO_EN_CURSO_KEY = 'baseball_partido_en_curso';
 export const HISTORIAL_JUEGOS_KEY = 'baseball_historial_juegos';
-
-export const DEFAULT_PLAYER_EXAMPLE: Omit<Jugada, 'codigo'> = {
-  jugada: 'JD',
-  descripcion: 'Jugador de Ejemplo',
-  category: PlayCategory.SPECIAL,
-  isDefault: true,
-  isActive: true,
-};
 
 export const defaultJugadas: Omit<Jugada, 'codigo'>[] = [
   // Hits
@@ -35,6 +28,7 @@ export const defaultJugadas: Omit<Jugada, 'codigo'>[] = [
   { jugada: 'SF', descripcion: 'Sacrifice Fly', category: PlayCategory.OUT, isDefault: true, isActive: true },
   { jugada: 'SH', descripcion: 'Sacrifice Hit/Bunt', category: PlayCategory.OUT, isDefault: true, isActive: true },
   { jugada: 'CS', descripcion: 'Cogido Robando', category: PlayCategory.OUT, isDefault: true, isActive: true },
+  { jugada: 'PK', descripcion: 'Pickoff', category: PlayCategory.OUT, isDefault: true, isActive: true },
   { jugada: 'DP', descripcion: 'Doble Play', category: PlayCategory.OUT, isDefault: true, isActive: true },
   { jugada: 'TP', descripcion: 'Triple Play', category: PlayCategory.OUT, isDefault: true, isActive: true },
   // On Base
@@ -54,16 +48,19 @@ export const defaultJugadas: Omit<Jugada, 'codigo'>[] = [
   // Special & Scoring Related
   { jugada: 'R', descripcion: 'Carrera Anotada', category: PlayCategory.SPECIAL, isDefault: true, isActive: true },
   { jugada: 'RBI', descripcion: 'Carrera Impulsada', category: PlayCategory.SPECIAL, isDefault: true, isActive: true },
-  // { jugada: 'ED', descripcion: 'Error Defensivo', category: PlayCategory.SPECIAL, isDefault: true, isActive: true }, // REMOVED
+  { jugada: 'ED', descripcion: 'Error Defensivo', category: PlayCategory.SPECIAL, isDefault: true, isActive: true },
   // System/Manual Plays (not directly user-selectable in general play modal, but used by system for specific logs)
   { jugada: 'OUT_RUNNER_BASE', descripcion: 'Out Corredor en Base', category: PlayCategory.OUT, isDefault: false, isActive: true },
   { jugada: 'ADV_OTRO', descripcion: 'Avance Manual (Otro Motivo)', category: PlayCategory.ADVANCEMENT, isDefault: false, isActive: true },
-  { jugada: 'OUT_ROH', descripcion: 'Out Corredor en Hit', category: PlayCategory.OUT, isDefault: false, isActive: true },
-  { jugada: 'OUT_ROS', descripcion: 'Out Corredor en Sacrificio', category: PlayCategory.OUT, isDefault: false, isActive: true },
 ];
 
 export const defaultFormatos: Omit<Formato, 'codigo'>[] = [
-  { descripcion: 'INTERLIGA 7 innings', cantidadInning: 7, isDefault: true },
-  { descripcion: 'FOGUEO 5 innings', cantidadInning: 5, isDefault: true },
-  { descripcion: 'ESTANDAR 9 innings', cantidadInning: 9, isDefault: true },
+  { descripcion: 'INTERLIGA', cantidadInning: 4, isDefault: true },
+  { descripcion: 'INTERLIGA', cantidadInning: 5, isDefault: true },
+  { descripcion: 'INTERLIGA', cantidadInning: 6, isDefault: true },
+  { descripcion: 'FOGUEO', cantidadInning: 4, isDefault: true },
+  { descripcion: 'FOGUEO', cantidadInning: 5, isDefault: true },
+  { descripcion: 'FOGUEO', cantidadInning: 6, isDefault: true },
+  { descripcion: 'FOGUEO', cantidadInning: 7, isDefault: true },
+  { descripcion: 'TORNEO', cantidadInning: 7, isDefault: true },
 ];

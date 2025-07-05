@@ -1,9 +1,10 @@
 
+
 import React, { useState, useEffect, useMemo } from 'react';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 import Select from '../ui/Select';
-import { LineupPlayer, RunnerAdvancementInfo, FielderChoiceResult } from '../../types';
+import { LineupPlayer, RunnerAdvancementInfo, FielderChoiceResult, Jugada } from '../../types';
 
 interface FielderChoiceOutcomeModalProps {
   isOpen: boolean;
@@ -11,7 +12,9 @@ interface FielderChoiceOutcomeModalProps {
   batter: LineupPlayer;
   runnersOnBase: RunnerAdvancementInfo[];
   initialOuts: number;
-  onConfirm: (result: FielderChoiceResult) => void;
+  jugada: Jugada;
+  onConfirm: (result: FielderChoiceResult, jugada: Jugada) => void;
+  requiredOuts?: number;
 }
 
 const getBaseLabel = (baseNum: number): string => {
@@ -23,13 +26,15 @@ const getBaseLabel = (baseNum: number): string => {
   return 'N/A';
 };
 
-const FielderChoiceOutcomeModal: React.FC<FielderChoiceOutcomeModalProps> = ({
+export const FielderChoiceOutcomeModal: React.FC<FielderChoiceOutcomeModalProps> = ({
   isOpen,
   onClose,
   batter,
   runnersOnBase,
   initialOuts,
+  jugada,
   onConfirm,
+  requiredOuts,
 }) => {
   const [selectedPrimaryOutPlayerId, setSelectedPrimaryOutPlayerId] = useState<string | null>(null);
   const [batterAdvancement, setBatterAdvancement] = useState<number>(1); // Batter typically reaches 1B
@@ -37,46 +42,57 @@ const FielderChoiceOutcomeModal: React.FC<FielderChoiceOutcomeModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      // Reset states
+      // Reset states when the modal is opened.
+      // The other dependencies (batter, runnersOnBase) are intentionally omitted
+      // to prevent re-initializing the modal's state on every parent re-render,
+      // which would cause an infinite loop and lose user selections.
       setSelectedPrimaryOutPlayerId(null);
       setBatterAdvancement(1); // Batter defaults to 1B
 
       const initialRunnerAdvancements: { [key: string]: number } = {};
+      const batterReachesFirst = true; // Since we are defaulting batterAdvancement to 1
+      
       runnersOnBase.forEach(runner => {
         // Default runners to hold or advance one base if forced by batter to 1B.
-        // This is a simple prefill; complex scenarios might need manual adjustment.
-        let prefilledTarget: number = runner.currentBase; // Explicitly type as number
-        if (runner.currentBase === 1 && batterAdvancement === 1) { // Batter to 1B, runner on 1B forced
+        let prefilledTarget: number = runner.currentBase;
+        
+        if (runner.currentBase === 1 && batterReachesFirst) { // Batter to 1B, runner on 1B forced
           prefilledTarget = 2;
-        } else if (runner.currentBase === 2 && batterAdvancement === 1 && runnersOnBase.some(r => r.currentBase === 1)) { // Batter to 1B, runner on 1B, runner on 2B forced
+        } else if (runner.currentBase === 2 && batterReachesFirst && runnersOnBase.some(r => r.currentBase === 1)) { // Batter to 1B, runner on 1B, runner on 2B forced
            prefilledTarget = 3;
-        } else if (runner.currentBase === 3 && batterAdvancement === 1 && runnersOnBase.some(r => r.currentBase === 1) && runnersOnBase.some(r => r.currentBase === 2)) { // Bases loaded
+        } else if (runner.currentBase === 3 && batterReachesFirst && runnersOnBase.some(r => r.currentBase === 1) && runnersOnBase.some(r => r.currentBase === 2)) { // Bases loaded
             prefilledTarget = 4; // Scores
         }
-        initialRunnerAdvancements[runner.lineupPlayerId] = prefilledTarget; // Line 54
+        initialRunnerAdvancements[runner.lineupPlayerId] = prefilledTarget;
       });
       setRunnerAdvancements(initialRunnerAdvancements);
     }
-  }, [isOpen, batter, runnersOnBase, batterAdvancement]); // Rerun if batterAdvancement changes to re-evaluate forced moves
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   const handlePrimaryOutSelected = (playerId: string | null) => {
+    const previousOutPlayerId = selectedPrimaryOutPlayerId;
     setSelectedPrimaryOutPlayerId(playerId);
-    // If a runner is selected as out, their advancement buttons might be hidden or disabled.
-    // If batter is selected as out, their advancement is set to 0.
-    if (playerId === batter.id) {
-        setBatterAdvancement(0); // Batter is out
-    } else if (playerId !== null) { // A runner is selected as out
-        setRunnerAdvancements(prev => ({...prev, [playerId]: 0}));
-    } else { // "Ninguno out" selected
-        // Re-evaluate batter advancement if they were previously marked out
-        if (batterAdvancement === 0 && selectedPrimaryOutPlayerId === batter.id) {
-            setBatterAdvancement(1); // Back to 1B
+
+    // If a new player is selected as out...
+    if (playerId) {
+        if (playerId === batter.id) {
+            setBatterAdvancement(0); // Batter is out
+        } else {
+            setRunnerAdvancements(prev => ({...prev, [playerId]: 0})); // Runner is out
         }
-        // Re-evaluate runner advancements if one was previously marked out
-        if (selectedPrimaryOutPlayerId && selectedPrimaryOutPlayerId !== batter.id) {
-            const runnerPreviouslyOut = runnersOnBase.find(r => r.lineupPlayerId === selectedPrimaryOutPlayerId);
+    }
+
+    // If a player who WAS out is no longer the primary out...
+    if (previousOutPlayerId && previousOutPlayerId !== playerId) {
+        if (previousOutPlayerId === batter.id) {
+            // Batter was out, now isn't. Reset to 1B.
+            setBatterAdvancement(1);
+        } else {
+            // Runner was out, now isn't. Reset to their original base.
+            const runnerPreviouslyOut = runnersOnBase.find(r => r.lineupPlayerId === previousOutPlayerId);
             if (runnerPreviouslyOut) {
-                 setRunnerAdvancements(prev => ({...prev, [selectedPrimaryOutPlayerId!]: runnerPreviouslyOut.currentBase})); // Back to original base
+                 setRunnerAdvancements(prev => ({...prev, [previousOutPlayerId]: runnerPreviouslyOut.currentBase}));
             }
         }
     }
@@ -100,38 +116,76 @@ const FielderChoiceOutcomeModal: React.FC<FielderChoiceOutcomeModalProps> = ({
     }
   };
 
-
   const handleConfirmClick = () => {
-    let outsCount = initialOuts;
-    if (selectedPrimaryOutPlayerId) outsCount++;
-    
-    // Check for multiple outs from button selections
-    if (batterAdvancement === 0 && selectedPrimaryOutPlayerId !== batter.id) outsCount++;
-    Object.values(runnerAdvancements).forEach(adv => {
-        if(adv === 0 && selectedPrimaryOutPlayerId !== Object.keys(runnerAdvancements).find(key => runnerAdvancements[key] === adv) ) outsCount++;
+    // Determine the final state of advancements
+    const finalRunnerAdvancements = { ...runnerAdvancements };
+    let finalBatterAdvancement = batterAdvancement;
+
+    // The dropdown is the source of truth for the *primary* out.
+    // If a player is selected in the dropdown, their advancement is 0.
+    if (selectedPrimaryOutPlayerId) {
+        if (selectedPrimaryOutPlayerId === batter.id) {
+            finalBatterAdvancement = 0;
+        } else {
+            finalRunnerAdvancements[selectedPrimaryOutPlayerId] = 0;
+        }
+    }
+
+    // Now, count the total number of unique players who are out
+    const playersOut = new Set<string>();
+    if (finalBatterAdvancement === 0) {
+        playersOut.add(batter.id);
+    }
+    Object.entries(finalRunnerAdvancements).forEach(([playerId, destination]) => {
+        if (destination === 0) {
+            playersOut.add(playerId);
+        }
     });
 
+    const outsThisPlay = playersOut.size;
 
-    if (outsCount > 3) {
-      alert("No se pueden registrar más de 3 outs en una entrada.");
+    if (requiredOuts && outsThisPlay !== requiredOuts) {
+        alert(`Debe seleccionar exactamente ${requiredOuts} jugador(es) out para esta jugada.`);
+        return;
+    }
+
+    const totalOutsAfterPlay = initialOuts + outsThisPlay;
+
+    if (totalOutsAfterPlay > 3) {
+      alert(`No se pueden registrar más de 3 outs en una entrada (calculado: ${totalOutsAfterPlay}).`);
       return;
     }
-
-    const finalRunnerAdvancements = { ...runnerAdvancements };
-    if (selectedPrimaryOutPlayerId && selectedPrimaryOutPlayerId !== batter.id) {
-      finalRunnerAdvancements[selectedPrimaryOutPlayerId] = 0; // Ensure primary out runner is marked as out
-    }
     
+    // Check for collisions on bases
+    const occupiedBases: { [key: number]: string } = {}; // Stores lineupPlayerId
+    if (finalBatterAdvancement >= 1 && finalBatterAdvancement <= 3) {
+        const batterInfo = runnersOnBase.find(r => r.lineupPlayerId === batter.id) || batter;
+        occupiedBases[finalBatterAdvancement] = batterInfo.nombreJugador;
+    }
+    for (const runnerId in finalRunnerAdvancements) {
+        const destBase = finalRunnerAdvancements[runnerId];
+        if (destBase >= 1 && destBase <= 3) { // Bases 1B, 2B, 3B
+            if (occupiedBases[destBase]) {
+                const runner = runnersOnBase.find(r => r.lineupPlayerId === runnerId);
+                alert(`Error: ${runner?.nombreJugador || 'Un corredor'} y ${occupiedBases[destBase]} no pueden ocupar la misma base (${getBaseLabel(destBase)}).`);
+                return; 
+            }
+            const runner = runnersOnBase.find(r => r.lineupPlayerId === runnerId);
+            occupiedBases[destBase] = runner?.nombreJugador || 'Un corredor';
+        }
+    }
+
+
     const result: FielderChoiceResult = {
       primaryOutPlayerId: selectedPrimaryOutPlayerId,
-      batterAdvancement: selectedPrimaryOutPlayerId === batter.id ? 0 : batterAdvancement,
+      batterAdvancement: finalBatterAdvancement,
       runnerAdvancements: finalRunnerAdvancements,
     };
-    onConfirm(result);
+    onConfirm(result, jugada);
   };
   
   const allPlayersForOutDropdown = [
-    { value: 'NONE', label: 'Ningún Corredor Out (Todos Safe)' },
+    { value: 'NONE', label: 'Ningún Jugador Out (Todos Safe)' },
     { value: batter.id, label: `${batter.nombreJugador} (Bateador)`},
     ...runnersOnBase.map(runner => ({
       value: runner.lineupPlayerId,
@@ -139,11 +193,13 @@ const FielderChoiceOutcomeModal: React.FC<FielderChoiceOutcomeModalProps> = ({
     })),
   ];
 
+  const modalTitle = `Resultado de ${jugada.descripcion} para ${batter.nombreJugador}`;
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={`Resultado de Fielder's Choice para ${batter.nombreJugador}`}
+      title={modalTitle}
       size="lg"
       contentClassName="max-h-[80vh] overflow-y-auto"
     >
@@ -157,7 +213,7 @@ const FielderChoiceOutcomeModal: React.FC<FielderChoiceOutcomeModalProps> = ({
         <hr className="my-3"/>
 
         {/* Batter Advancement */}
-        <div className={`p-3 border rounded-md shadow-sm ${selectedPrimaryOutPlayerId === batter.id ? 'bg-red-100 border-red-300' : 'bg-gray-50'}`}>
+        <div className={`p-3 border rounded-md shadow-sm ${selectedPrimaryOutPlayerId === batter.id || batterAdvancement === 0 ? 'bg-red-100 border-red-300' : 'bg-gray-50'}`}>
           <p className="font-medium text-gray-800">Bateador: {batter.nombreJugador}</p>
           <div className="flex flex-wrap gap-2 mt-2">
             {[1, 2, 3, 4, 0].map(baseNum => (
@@ -180,7 +236,7 @@ const FielderChoiceOutcomeModal: React.FC<FielderChoiceOutcomeModalProps> = ({
             const isRunnerThePrimaryOut = selectedPrimaryOutPlayerId === runner.lineupPlayerId;
             const currentRunnerDest = runnerAdvancements[runner.lineupPlayerId];
             return (
-                <div key={runner.lineupPlayerId} className={`p-3 border rounded-md shadow-sm ${isRunnerThePrimaryOut ? 'bg-red-100 border-red-300' : 'bg-gray-50'}`}>
+                <div key={runner.lineupPlayerId} className={`p-3 border rounded-md shadow-sm ${isRunnerThePrimaryOut || currentRunnerDest === 0 ? 'bg-red-100 border-red-300' : 'bg-gray-50'}`}>
                 <p className="font-medium text-gray-800">
                     Corredor: {runner.nombreJugador} (en ${runner.currentBase}B originalmente)
                 </p>
@@ -207,12 +263,10 @@ const FielderChoiceOutcomeModal: React.FC<FielderChoiceOutcomeModalProps> = ({
             Cancelar
           </Button>
           <Button onClick={handleConfirmClick} variant="primary">
-            Confirmar Resultado FC
+            Confirmar Resultado
           </Button>
         </div>
       </div>
     </Modal>
   );
 };
-
-export default FielderChoiceOutcomeModal;

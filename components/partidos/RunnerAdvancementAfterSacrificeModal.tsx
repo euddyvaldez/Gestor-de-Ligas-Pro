@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
@@ -34,17 +35,19 @@ const RunnerAdvancementAfterSacrificeModal: React.FC<RunnerAdvancementAfterSacri
 
   useEffect(() => {
     if (isOpen) {
-      const newAdvancementsState: { [key: string]: number } = {};
+      // Start with the advancements provided from the parent
+      const newAdvancementsState: { [key: string]: number } = { ...initialAdvancements };
+      
       runnersOnBase.forEach(runner => {
-        // For SF, the runner from 3B (if conditions met) is assumed to score and might not even be in `runnersOnBase` prop here.
-        // This modal should primarily handle runners on 1B/2B for SF, or all runners for SH.
-        // Default prefill: advance one base if possible, or hold. User can override.
-        // More sophisticated prefill might consider forced advances on SH.
-        newAdvancementsState[runner.lineupPlayerId] = Math.min(4, runner.currentBase + 1); 
+        // Only pre-fill if a decision hasn't been made yet for this runner in the initial data
+        if (newAdvancementsState[runner.lineupPlayerId] === undefined) {
+          // Default prefill: advance one base if possible. User can override.
+          newAdvancementsState[runner.lineupPlayerId] = Math.min(4, runner.currentBase + 1); 
+        }
       });
       setAdvancements(newAdvancementsState);
     }
-  }, [isOpen, runnersOnBase, sacrificeType, initialOuts]);
+  }, [isOpen, runnersOnBase, sacrificeType, initialOuts, initialAdvancements]);
 
   const handleAdvancementChange = (runnerId: string, targetBase: number) => {
     setAdvancements(prev => ({ ...prev, [runnerId]: targetBase }));

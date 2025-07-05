@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useCallback, ChangeEvent, useRef, DragEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Papa from 'papaparse';
@@ -16,8 +17,8 @@ import Select from '../components/ui/Select';
 import Modal from '../components/ui/Modal';
 import { findNextBatterInLineup, recalculateLineupOrder, createEmptyBatterStats, createEmptyGameStatus, initialPartidoData, createEmptyTeamStats } from '../utils/partidoUtils';
 import PlayerSelectionModal from '../components/partidos/PlayerSelectionModal';
-import PositionSelectionModal from '../components/partidos/PositionSelectionModal'; // Added
-import IconButton, { ArrowUpTriangleIcon, ArrowDownTriangleIcon } from '../components/ui/IconButton'; // Added
+import PositionSelectionModal from '../components/partidos/PositionSelectionModal';
+import IconButton, { ArrowUpTriangleIcon, ArrowDownTriangleIcon } from '../components/ui/IconButton';
 
 
 interface PositionConflictDetails {
@@ -36,8 +37,7 @@ const ConfigurarPartidoPage: React.FC = () => {
 
   const [setupStep, setSetupStep] = useState(1);
   const [tempSetupData, setTempSetupData] = useState<Partial<PartidoData>>(() => {
-    const defaultFormato = formatos.find(f => f.isDefault) || (formatos.length > 0 ? formatos[0] : undefined);
-    return initialPartidoData(appConfig, defaultFormato);
+    return initialPartidoData(appConfig, undefined);
   });
   
   const [selectedVisitantePlayers, setSelectedVisitantePlayers] = useState<Set<number>>(new Set());
@@ -62,19 +62,11 @@ const ConfigurarPartidoPage: React.FC = () => {
   const [playerForPositionModal, setPlayerForPositionModal] = useState<LineupPlayer | null>(null);
   const [teamForPositionModal, setTeamForPositionModal] = useState<'visitante' | 'local' | null>(null);
 
+  const [isFieldsMissingModalOpen, setIsFieldsMissingModalOpen] = useState(false);
+  const [missingFieldsList, setMissingFieldsList] = useState<string[]>([]);
+
 
   const navigate = useNavigate();
-
-  useEffect(() => {
-    if (!tempSetupData.formatoJuegoId && formatos.length > 0) {
-        const defaultFormato = formatos.find(f => f.isDefault) || formatos[0];
-        setTempSetupData(prev => ({
-            ...prev,
-            formatoJuegoId: defaultFormato.codigo,
-            maxInnings: defaultFormato.cantidadInning
-        }));
-    }
-  }, [formatos, tempSetupData.formatoJuegoId, appConfig.defaultMaxInnings]);
 
   useEffect(() => {
     if (jugadoresDB.length === 0) return; 
@@ -158,13 +150,31 @@ const ConfigurarPartidoPage: React.FC = () => {
   };
 
   const proceedToNextSetupStep = () => {
-    modalManuallyClosedRef.current = false; 
-    if (setupStep === 1) { 
-        if (!tempSetupData.nombreEquipoVisitante?.trim() || !tempSetupData.nombreEquipoLocal?.trim()) {
-            alert("Los nombres de los equipos son obligatorios.");
+    modalManuallyClosedRef.current = false;
+    if (setupStep === 1) {
+        const missingFields: string[] = [];
+        if (!tempSetupData.fecha?.trim()) {
+            missingFields.push("Fecha del Juego");
+        }
+        if (!tempSetupData.formatoJuegoId || tempSetupData.formatoJuegoId === 0) {
+            missingFields.push("Formato del Juego");
+        }
+        if (!tempSetupData.numeroJuego?.trim()) {
+            missingFields.push("Número de Juego");
+        }
+        if (!tempSetupData.nombreEquipoVisitante?.trim()) {
+            missingFields.push("Nombre Equipo Visitante");
+        }
+        if (!tempSetupData.nombreEquipoLocal?.trim()) {
+            missingFields.push("Nombre Equipo Local");
+        }
+
+        if (missingFields.length > 0) {
+            setMissingFieldsList(missingFields);
+            setIsFieldsMissingModalOpen(true);
             return;
         }
-        setSetupStep(2); 
+        setSetupStep(2);
     } else if (setupStep === 4) { 
         const visitorLineup = tempSetupData.lineupVisitante || [];
         const playersWithoutPos = visitorLineup.filter(p => p.posicion === EMPTY_POSICION_PLACEHOLDER).map(p => p.nombreJugador);
@@ -441,6 +451,7 @@ const ConfigurarPartidoPage: React.FC = () => {
                             equipoBateadorNombre:String(r.equipoBateadorNombre||'Unknown Team'),
                             jugadaId:String(r.jugadaId||'UNKNOWN_PLAY'),
                             descripcion:String(r.descripcion||'Unknown Play Desc'),
+                            categoria: String(r.categoria || ''),
                             outsPrev:Number(r.outsPrev||0),
                             outsAfter:Number(r.outsAfter||0),
                             basesPrevState: String(r.basesPrevState || "null-null-null"),
@@ -448,7 +459,6 @@ const ConfigurarPartidoPage: React.FC = () => {
                             runScored:Number(r.runScored||0),
                             rbi:Number(r.rbi||0),
                             advancementReason: String(r.advancementReason || ''),
-                            isUndoMarker: r.isUndoMarker === 'true' || r.isUndoMarker === true,
                             fechaDelPartido: String(r.fechaDelPartido || newSetupDataFromCsv.fecha || new Date().toISOString().split('T')[0]),
                             formatoDelPartidoDesc: String(r.formatoDelPartidoDesc || formatos.find(f => f.codigo === newSetupDataFromCsv.formatoJuegoId)?.descripcion || 'N/A'),
                             numeroDelPartido: String(r.numeroDelPartido || newSetupDataFromCsv.numeroJuego || ''),
@@ -670,9 +680,6 @@ const ConfigurarPartidoPage: React.FC = () => {
 };
 
   const formatoOptions = formatos.map(f => ({ value: String(f.codigo), label: `${f.descripcion} (${f.cantidadInning} innings)` }));
-  if (formatos.length === 0 && !tempSetupData.formatoJuegoId) {
-     formatoOptions.unshift({ value: "0", label: `Por defecto (${appConfig.defaultMaxInnings} innings)` });
-  }
   const equipoOptions = [{ value: "", label: "Personalizado / Nuevo" }, ...equiposDB.map(e => ({ value: String(e.codigo), label: e.nombre }))];
 
 
@@ -687,15 +694,15 @@ const ConfigurarPartidoPage: React.FC = () => {
       {setupStep === 1 && (
         <div className="space-y-4">
           <h2 className="text-xl font-semibold">Paso 1: Información General del Partido</h2>
-          <Input label="Fecha del Juego" type="date" name="fecha" value={tempSetupData.fecha || ''} onChange={handleSetupInputChange} />
-          <Select label="Formato del Juego" name="formatoJuegoId" options={formatoOptions} value={String(tempSetupData.formatoJuegoId || '0')} onChange={handleSetupInputChange} />
-          <Input label="Número de Juego (Opcional)" name="numeroJuego" value={tempSetupData.numeroJuego || ''} onChange={handleSetupInputChange} placeholder="Ej: 101"/>
+          <Input label="Fecha del Juego" type="date" name="fecha" value={tempSetupData.fecha || ''} onChange={handleSetupInputChange} className="bg-gray-50"/>
+          <Select label="Formato del Juego" name="formatoJuegoId" options={formatoOptions} value={String(tempSetupData.formatoJuegoId || '0')} onChange={handleSetupInputChange} className="bg-gray-50" placeholder="-- Seleccione un Formato --"/>
+          <Input label="Número de Juego" name="numeroJuego" value={tempSetupData.numeroJuego || ''} onChange={handleSetupInputChange} placeholder="Ej: 101" className="bg-gray-50"/>
           <h3 className="text-lg font-medium pt-2">Equipo Visitante</h3>
           <Select label="Seleccionar Equipo Visitante Existente (Opcional)" name="selectedEquipoVisitanteId" options={equipoOptions} value={String(tempSetupData.selectedEquipoVisitanteId || '')} onChange={handleSetupInputChange} />
-          <Input label="Nombre Equipo Visitante" name="nombreEquipoVisitante" value={tempSetupData.nombreEquipoVisitante || ''} onChange={handleSetupInputChange} required disabled={!!tempSetupData.selectedEquipoVisitanteId} />
+          <Input label="Nombre Equipo Visitante" name="nombreEquipoVisitante" value={tempSetupData.nombreEquipoVisitante || ''} onChange={handleSetupInputChange} required disabled={!!tempSetupData.selectedEquipoVisitanteId} className="bg-gray-50"/>
           <h3 className="text-lg font-medium pt-2">Equipo Local</h3>
           <Select label="Seleccionar Equipo Local Existente (Opcional)" name="selectedEquipoLocalId" options={equipoOptions} value={String(tempSetupData.selectedEquipoLocalId || '')} onChange={handleSetupInputChange} />
-          <Input label="Nombre Equipo Local" name="nombreEquipoLocal" value={tempSetupData.nombreEquipoLocal || ''} onChange={handleSetupInputChange} required disabled={!!tempSetupData.selectedEquipoLocalId} />
+          <Input label="Nombre Equipo Local" name="nombreEquipoLocal" value={tempSetupData.nombreEquipoLocal || ''} onChange={handleSetupInputChange} required disabled={!!tempSetupData.selectedEquipoLocalId} className="bg-gray-50"/>
           <div className="flex justify-end mt-6">
             <Button onClick={proceedToNextSetupStep} variant="primary">Siguiente (Seleccionar Jugadores Visitantes)</Button>
           </div>
@@ -782,6 +789,18 @@ const ConfigurarPartidoPage: React.FC = () => {
               ))}
               <div className="flex justify-end pt-3">
                   <Button variant="primary" onClick={() => setIsPositionMissingModalOpen(false)}>Entendido</Button>
+              </div>
+          </div>
+      </Modal>
+
+      <Modal isOpen={isFieldsMissingModalOpen} onClose={() => setIsFieldsMissingModalOpen(false)} title="Campos Obligatorios Faltantes">
+          <div className="space-y-3">
+              <p className="text-red-600 font-semibold">Por favor, complete los siguientes campos antes de continuar:</p>
+              <ul className="list-disc list-inside text-sm text-gray-600 pl-4">
+                  {missingFieldsList.map(field => <li key={field}>{field}</li>)}
+              </ul>
+              <div className="flex justify-end pt-3">
+                  <Button variant="primary" onClick={() => setIsFieldsMissingModalOpen(false)}>Entendido</Button>
               </div>
           </div>
       </Modal>

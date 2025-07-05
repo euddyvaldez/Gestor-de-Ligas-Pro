@@ -7,8 +7,8 @@ import JugadasPage from './pages/JugadasPage';
 import FormatoJuegoPage from './pages/FormatoJuegoPage';
 import ConfiguracionPage from './pages/ConfiguracionPage';
 import HistorialPage from './pages/HistorialPage';
-import { PartidosPage } from './pages/PartidosPage'; // Changed to named import
-import ConfigurarPartidoPage from './pages/ConfigurarPartidoPage'; // Added
+import PartidosPage from './pages/PartidosPage';
+import ConfigurarPartidoPage from './pages/ConfigurarPartidoPage';
 
 import useLocalStorage from './hooks/useLocalStorage';
 import { getItem, setItem } from './services/localStorageService';
@@ -80,7 +80,7 @@ const App: React.FC = () => {
           <Route path="formatos" element={<FormatoJuegoPage />} />
           <Route path="configuracion" element={<ConfiguracionPage />} />
           <Route path="historial" element={<HistorialPage />} />
-          <Route path="configurar-partido" element={<ConfigurarPartidoPage />} /> {/* Added */}
+          <Route path="configurar-partido" element={<ConfigurarPartidoPage />} />
           <Route path="partidos" element={<PartidosPage />} />
           <Route path="*" element={<HomePage />} />
         </Route>

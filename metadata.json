@@ -1,5 +1,5 @@
 {
-  "name": "Gestor de Ligas Pro 2.1",
+  "name": "Gestor de Ligas Pro 2.1 - Reestructura",
   "description": "A web application to manage baseball league games, players, plays, formats, and history. Allows for game setup, live scoring, and viewing game history.",
   "requestFramePermissions": [],
   "prompt": ""
