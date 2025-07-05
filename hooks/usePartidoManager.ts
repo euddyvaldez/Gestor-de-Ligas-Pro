@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Papa from 'papaparse';
 import { useNavigate } from 'react-router-dom';
@@ -1413,6 +1412,7 @@ export const usePartidoManager = (initialPartidoData: PartidoData | null) => {
                     targetPosition: newPosition,
                     team: team,
                 });
+                setIsEditPlayerPositionModalOpen(false);
                 setIsPositionConflictModalOpen(true);
                 return;
             }
@@ -1467,27 +1467,32 @@ export const usePartidoManager = (initialPartidoData: PartidoData | null) => {
                 if (existingPlayerIndex > -1) {
                     const originalBattingOrder = lineupToUpdate[existingPlayerIndex].ordenBate;
                     lineupToUpdate[existingPlayerIndex].posicion = 'BE';
-                    lineupToUpdate[existingPlayerIndex].ordenBate = 999;
-    
+                    
                     if (isNewPlayer) {
                         const newPlayerEntry: LineupPlayer = {
                             ...conflictingPlayer,
                             id: generateUUID(),
                             posicion: targetPosition,
-                            ordenBate: originalBattingOrder,
+                            ordenBate: originalBattingOrder, // Inherit batting order
                         };
                         lineupToUpdate.push(newPlayerEntry);
                         addToast(`${conflictingPlayer.nombreJugador} agregado, ${existingPlayerInTargetPosition.nombreJugador} movido a la banca.`, 'success');
                     } else {
                         const conflictingPlayerIndex = lineupToUpdate.findIndex((p: LineupPlayer) => p.id === conflictingPlayer.id);
                         if (conflictingPlayerIndex > -1) {
-                            lineupToUpdate[conflictingPlayerIndex].posicion = targetPosition;
-                            lineupToUpdate[conflictingPlayerIndex].ordenBate = originalBattingOrder;
+                             lineupToUpdate[conflictingPlayerIndex].posicion = targetPosition;
+                             lineupToUpdate[conflictingPlayerIndex].ordenBate = originalBattingOrder; // Inherit batting order
                         }
                     }
     
                     const nextBatterKey = team === 'visitante' ? 'nextVisitorBatterLineupPlayerId' : 'nextLocalBatterLineupPlayerId';
-                    const { updatedLineup, newNextBatterForThisTeamId } = recalculateLineupOrder(lineupToUpdate, prev.gameStatus[nextBatterKey]);
+                    const { updatedLineup, newNextBatterForThisTeamId } = recalculateLineupOrder(lineupToUpdate, prev.gameStatus[nextBatterKey], existingPlayerInTargetPosition.id, conflictingPlayer.id);
+                    
+                    const currentBatter = prev.gameStatus.currentBatterLineupPlayerId;
+                    if (currentBatter === existingPlayerInTargetPosition.id) {
+                       newState.gameStatus.currentBatterLineupPlayerId = newNextBatterForThisTeamId;
+                    }
+
                     newState[lineupKey] = updatedLineup;
                     newState.gameStatus[nextBatterKey] = newNextBatterForThisTeamId;
                 }
@@ -1497,7 +1502,6 @@ export const usePartidoManager = (initialPartidoData: PartidoData | null) => {
     
         setIsPositionConflictModalOpen(false);
         setPositionConflictDetails(null);
-        setIsEditPlayerPositionModalOpen(false);
         setEditingPlayerForPosition(null);
     }, [positionConflictDetails, updateCurrentPartidoAndHistory, addToast]);
     
