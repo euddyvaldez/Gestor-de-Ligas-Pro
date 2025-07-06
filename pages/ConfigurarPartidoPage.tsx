@@ -1,6 +1,6 @@
 
 
-import React, { useState, useEffect, useCallback, ChangeEvent, useRef, DragEvent } from 'react';
+import React, { useState, useEffect, useCallback, ChangeEvent, useRef, DragEvent, TouchEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Papa from 'papaparse';
 import {
@@ -64,9 +64,34 @@ const ConfigurarPartidoPage: React.FC = () => {
 
   const [isFieldsMissingModalOpen, setIsFieldsMissingModalOpen] = useState(false);
   const [missingFieldsList, setMissingFieldsList] = useState<string[]>([]);
+  const lineupTableBodyRef = useRef<HTMLTableSectionElement>(null);
 
 
   const navigate = useNavigate();
+
+  const nativeTouchMoveHandler = useCallback((e: globalThis.TouchEvent) => {
+    if (!draggingPlayerId) return;
+    e.preventDefault();
+
+    const touchLocation = e.touches[0];
+    const targetElement = document.elementFromPoint(touchLocation.clientX, touchLocation.clientY);
+    const row = targetElement?.closest('tr[data-player-id]');
+    const targetPlayerId = row?.getAttribute('data-player-id');
+    
+    if (targetPlayerId) {
+        setDragOverPlayerId(targetPlayerId);
+    }
+  }, [draggingPlayerId]);
+
+  useEffect(() => {
+      const tableBody = lineupTableBodyRef.current;
+      if (tableBody) {
+          tableBody.addEventListener('touchmove', nativeTouchMoveHandler, { passive: false });
+          return () => {
+              tableBody.removeEventListener('touchmove', nativeTouchMoveHandler);
+          };
+      }
+  }, [nativeTouchMoveHandler, setupStep]);
 
   useEffect(() => {
     if (jugadoresDB.length === 0) return; 
@@ -516,56 +541,98 @@ const ConfigurarPartidoPage: React.FC = () => {
     setTeamForModalSelection(null);
   };
 
+    const updateBattingOrder = (lineup: LineupPlayer[]): LineupPlayer[] => {
+        let activePlayerOrder = 1;
+        const activePlayers: LineupPlayer[] = [];
+        const benchPlayers: LineupPlayer[] = [];
+    
+        // Separate active and bench players based on their current order in the array.
+        // The order of the `lineup` parameter is the desired new order from the UI.
+        lineup.forEach(player => {
+            if (player.posicion !== 'BE' && player.posicion !== EMPTY_POSICION_PLACEHOLDER) {
+                activePlayers.push(player);
+            } else {
+                benchPlayers.push(player);
+            }
+        });
+    
+        // Re-assign batting order for active players based on their new array position.
+        const updatedActivePlayers = activePlayers.map(player => ({
+            ...player,
+            ordenBate: activePlayerOrder++,
+        }));
+    
+        // Re-assign batting order for bench players (they come after active players).
+        // Their relative order among themselves is preserved from the `lineup` array.
+        const updatedBenchPlayers = benchPlayers.map(player => ({
+            ...player,
+            ordenBate: activePlayerOrder++,
+        }));
+        
+        // Combine them back. Active players are first (batting), then bench players.
+        return [...updatedActivePlayers, ...updatedBenchPlayers];
+    };
+
+  const movePlayerInLineup = useCallback((sourceId: string, targetId: string, team: 'visitante' | 'local') => {
+    setTempSetupData(prev => {
+        if (!prev) return prev;
+        const lineupKey = team === 'visitante' ? 'lineupVisitante' : 'lineupLocal';
+        const lineup = prev[lineupKey] ? [...prev[lineupKey]!] : [];
+        if (lineup.length === 0 || sourceId === targetId) return prev;
+
+        const sourceIndex = lineup.findIndex(p => p.id === sourceId);
+        const targetIndex = lineup.findIndex(p => p.id === targetId);
+
+        if (sourceIndex === -1 || targetIndex === -1) return prev;
+
+        const items = Array.from(lineup);
+        const [reorderedItem] = items.splice(sourceIndex, 1);
+        items.splice(targetIndex, 0, reorderedItem);
+        
+        const updatedLineup = updateBattingOrder(items);
+        return { ...prev, [lineupKey]: updatedLineup };
+    });
+  }, []);
 
   const handleDragStart = (e: DragEvent<HTMLTableRowElement>, playerId: string) => {
     e.dataTransfer.setData("playerId", playerId);
     setDraggingPlayerId(playerId);
   };
 
-  const handleDragOver = (e: DragEvent<HTMLTableRowElement>, targetPlayerId: string) => {
-    if (!draggingPlayerId) return;
-    e.preventDefault(); // Necessary to allow drop
-    if (targetPlayerId !== draggingPlayerId) { // Don't highlight if dragging over itself
-      setDragOverPlayerId(targetPlayerId);
+  const handleDragOver = (e: DragEvent<HTMLTableRowElement>) => {
+    e.preventDefault();
+    const row = e.currentTarget;
+    if (row.dataset.playerId) {
+      setDragOverPlayerId(row.dataset.playerId);
     }
   };
   
-  const handleDragLeave = (e: DragEvent<HTMLTableRowElement>) => {
+  const handleDragLeave = () => {
     setDragOverPlayerId(null);
   };
 
-  const handleDrop = (e: DragEvent<HTMLTableRowElement>, targetPlayerId: string, team: 'visitante' | 'local') => {
-    if (!draggingPlayerId) return;
+  const handleDrop = (e: DragEvent<HTMLTableRowElement>, team: 'visitante' | 'local') => {
     e.preventDefault();
-    const sourcePlayerId = draggingPlayerId; // Use state directly
+    const sourcePlayerId = e.dataTransfer.getData("playerId");
+    const targetPlayerId = e.currentTarget.dataset.playerId;
+
+    if (sourcePlayerId && targetPlayerId && sourcePlayerId !== targetPlayerId) {
+      movePlayerInLineup(sourcePlayerId, targetPlayerId, team);
+    }
     setDraggingPlayerId(null);
     setDragOverPlayerId(null);
+  };
+  
+  const handleTouchStart = (e: TouchEvent<HTMLTableRowElement>, playerId: string) => {
+    setDraggingPlayerId(playerId);
+  };
 
-    if (sourcePlayerId === targetPlayerId) return; // Dropped on itself
-
-    setTempSetupData(prev => {
-        if (!prev) return prev;
-        const lineupKey = team === 'visitante' ? 'lineupVisitante' : 'lineupLocal';
-        let lineup = prev[lineupKey] ? [...prev[lineupKey]!] : [];
-        if (lineup.length === 0) return prev;
-
-        const sourcePlayerIndex = lineup.findIndex(p => p.id === sourcePlayerId);
-        let targetPlayerIndex = lineup.findIndex(p => p.id === targetPlayerId);
-
-        if (sourcePlayerIndex === -1 || targetPlayerIndex === -1) return prev; 
-        
-        const items = Array.from(lineup);
-        const [reorderedItem] = items.splice(sourcePlayerIndex, 1);
-        
-        // Adjust targetPlayerIndex if source was before target
-        if (sourcePlayerIndex < targetPlayerIndex) {
-            targetPlayerIndex--; 
-        }
-        items.splice(targetPlayerIndex, 0, reorderedItem);
-        
-        const { updatedLineup } = recalculateLineupOrder(items, null); 
-        return { ...prev, [lineupKey]: updatedLineup };
-    });
+  const handleTouchEnd = (team: 'visitante' | 'local') => {
+    if (draggingPlayerId && dragOverPlayerId && draggingPlayerId !== dragOverPlayerId) {
+        movePlayerInLineup(draggingPlayerId, dragOverPlayerId, team);
+    }
+    setDraggingPlayerId(null);
+    setDragOverPlayerId(null);
   };
 
   const handleMovePlayerInBattingOrder = (playerId: string, direction: 'up' | 'down', team: 'visitante' | 'local') => {
@@ -590,7 +657,7 @@ const ConfigurarPartidoPage: React.FC = () => {
         const [playerToMove] = items.splice(playerIndex, 1);
         items.splice(newIndex, 0, playerToMove);
         
-        const { updatedLineup } = recalculateLineupOrder(items, null);
+        const updatedLineup = updateBattingOrder(items);
         return { ...prev, [lineupKey]: updatedLineup };
       }
       return prev;
@@ -620,15 +687,18 @@ const ConfigurarPartidoPage: React.FC = () => {
                             <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Mover</th>
                         </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody ref={lineupTableBodyRef} className="bg-white divide-y divide-gray-200">
                         {lineupData.map((player, index) => (
                             <tr 
                                 key={player.id} 
-                                draggable={player.posicion !== 'BE' && player.posicion !== EMPTY_POSICION_PLACEHOLDER} // Only active players draggable for order
+                                data-player-id={player.id}
+                                draggable={player.posicion !== 'BE' && player.posicion !== EMPTY_POSICION_PLACEHOLDER}
                                 onDragStart={(e) => (player.posicion !== 'BE' && player.posicion !== EMPTY_POSICION_PLACEHOLDER) && handleDragStart(e, player.id)}
-                                onDragOver={(e) => (player.posicion !== 'BE' && player.posicion !== EMPTY_POSICION_PLACEHOLDER) && handleDragOver(e, player.id)}
+                                onDragOver={handleDragOver}
                                 onDragLeave={handleDragLeave}
-                                onDrop={(e) => (player.posicion !== 'BE' && player.posicion !== EMPTY_POSICION_PLACEHOLDER) && handleDrop(e, player.id, teamType)}
+                                onDrop={(e) => (player.posicion !== 'BE' && player.posicion !== EMPTY_POSICION_PLACEHOLDER) && handleDrop(e, teamType)}
+                                onTouchStart={(e) => (player.posicion !== 'BE' && player.posicion !== EMPTY_POSICION_PLACEHOLDER) && handleTouchStart(e, player.id)}
+                                onTouchEnd={() => (player.posicion !== 'BE' && player.posicion !== EMPTY_POSICION_PLACEHOLDER) && handleTouchEnd(teamType)}
                                 className={`
                                     ${(player.posicion === 'BE' || player.posicion === EMPTY_POSICION_PLACEHOLDER) ? 'bg-gray-100 opacity-70' : 'cursor-grab'}
                                     ${draggingPlayerId === player.id ? 'opacity-30 bg-blue-100' : ''}

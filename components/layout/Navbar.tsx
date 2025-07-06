@@ -32,20 +32,20 @@ const Navbar: React.FC = () => {
     };
 
     window.addEventListener('storage', handleStorage);
-    // Initial check on mount
+    // This now runs on mount and on every navigation, ensuring the state is fresh.
     setPartidoEnCursoNavbar(getItem<PartidoData>(PARTIDO_EN_CURSO_KEY, null));
 
 
     return () => {
       window.removeEventListener('storage', handleStorage);
     };
-  }, []); 
+  }, [location]); // Depend on location to re-check when URL changes.
 
 
   const navItems = [
     { path: '/', label: 'Inicio' },
     { path: '/configurar-partido', label: 'Nuevo Partido' }, 
-    { path: '/partidos', label: 'Partido en Curso' },
+    ...(partidoEnCursoNavbar ? [{ path: '/partidos', label: 'Partido en Curso' }] : []),
     { path: '/jugadores', label: 'Jugadores y Equipos' },
     { path: '/jugadas', label: 'Jugadas' },
     { path: '/formatos', label: 'Formatos' },
