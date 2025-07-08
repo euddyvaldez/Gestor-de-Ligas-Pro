@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, DragEvent, TouchEvent, useCallback, useRef } from 'react';
 import { usePartido } from '../../context/PartidoContext';
 import LineupTable from './LineupTable';
 import IconButton from '../ui/IconButton';
@@ -10,21 +9,25 @@ import { IoPersonAdd } from 'react-icons/io5';
 type ActiveLineupTab = 'visitante' | 'local';
 
 const LineupManager: React.FC = () => {
-    const { currentPartido, handleRequestAddPlayerToLineup, gamePhase } = usePartido();
+    const { 
+        currentPartido, 
+        handleRequestAddPlayerToLineup, 
+        gamePhase,
+        handleMovePlayerInLineup
+    } = usePartido();
     const [activeLineupTab, setActiveLineupTab] = useState<ActiveLineupTab>('visitante');
     const [inningToShowInLineups, setInningToShowInLineups] = useState(1);
 
+    const [draggingPlayerId, setDraggingPlayerId] = useState<string | null>(null);
+    const [dragOverPlayerId, setDragOverPlayerId] = useState<string | null>(null);
+    const lineupTableBodyRef = useRef<HTMLTableSectionElement>(null);
+    
     React.useEffect(() => {
         if(currentPartido) {
             setActiveLineupTab(currentPartido.gameStatus.currentHalfInning === 'Top' ? 'visitante' : 'local');
             setInningToShowInLineups(currentPartido.gameStatus.actualInningNumber);
         }
     }, [currentPartido?.gameStatus.currentHalfInning, currentPartido?.gameStatus.actualInningNumber]);
-
-
-    if (!currentPartido) return null;
-
-    const { nombreEquipoVisitante, nombreEquipoLocal, lineupVisitante, lineupLocal } = currentPartido;
 
     const handlePreviousInningLineup = () => {
         setInningToShowInLineups(prev => Math.max(1, prev - 1));
@@ -34,6 +37,76 @@ const LineupManager: React.FC = () => {
             setInningToShowInLineups(prev => Math.min(currentPartido.gameStatus.actualInningNumber, prev + 1));
         }
     };
+    
+    const handleDragStart = (e: DragEvent<HTMLTableRowElement>, playerId: string) => {
+        e.dataTransfer.setData("playerId", playerId);
+        setDraggingPlayerId(playerId);
+    };
+    
+    const handleDragOver = (e: DragEvent<HTMLTableRowElement>) => {
+        e.preventDefault();
+        const row = e.currentTarget;
+        if (row.dataset.playerId) {
+            setDragOverPlayerId(row.dataset.playerId);
+        }
+    };
+    
+    const handleDragLeave = () => {
+        setDragOverPlayerId(null);
+    };
+
+    const handleDrop = (e: DragEvent<HTMLTableRowElement>, team: 'visitante' | 'local') => {
+        e.preventDefault();
+        const sourcePlayerId = e.dataTransfer.getData("playerId");
+        const targetPlayerId = e.currentTarget.dataset.playerId;
+    
+        if (sourcePlayerId && targetPlayerId && sourcePlayerId !== targetPlayerId) {
+          handleMovePlayerInLineup(sourcePlayerId, targetPlayerId, team);
+        }
+        setDraggingPlayerId(null);
+        setDragOverPlayerId(null);
+    };
+      
+    const handleTouchStart = (e: TouchEvent<HTMLTableRowElement>, playerId: string) => {
+        setDraggingPlayerId(playerId);
+    };
+
+    const handleTouchEnd = (team: 'visitante' | 'local') => {
+        if (draggingPlayerId && dragOverPlayerId && draggingPlayerId !== dragOverPlayerId) {
+            handleMovePlayerInLineup(draggingPlayerId, dragOverPlayerId, team);
+        }
+        setDraggingPlayerId(null);
+        setDragOverPlayerId(null);
+    };
+
+    const nativeTouchMoveHandler = useCallback((e: globalThis.TouchEvent) => {
+        if (!draggingPlayerId) return;
+        e.preventDefault();
+    
+        const touchLocation = e.touches[0];
+        const targetElement = document.elementFromPoint(touchLocation.clientX, touchLocation.clientY);
+        const row = targetElement?.closest('tr[data-player-id]');
+        const targetPlayerId = row?.getAttribute('data-player-id');
+        
+        if (targetPlayerId) {
+            setDragOverPlayerId(targetPlayerId);
+        }
+    }, [draggingPlayerId]);
+    
+    React.useEffect(() => {
+        const tableBody = lineupTableBodyRef.current;
+        if (tableBody) {
+            tableBody.addEventListener('touchmove', nativeTouchMoveHandler, { passive: false });
+            return () => {
+                tableBody.removeEventListener('touchmove', nativeTouchMoveHandler);
+            };
+        }
+    }, [nativeTouchMoveHandler, lineupTableBodyRef, activeLineupTab]);
+
+
+    if (!currentPartido) return null;
+
+    const { nombreEquipoVisitante, nombreEquipoLocal, lineupVisitante, lineupLocal } = currentPartido;
 
     const lineupToDisplay = activeLineupTab === 'visitante' ? lineupVisitante : lineupLocal;
 
@@ -82,6 +155,15 @@ const LineupManager: React.FC = () => {
                     lineup={lineupToDisplay}
                     teamType={activeLineupTab}
                     inningToShow={inningToShowInLineups}
+                    draggingPlayerId={draggingPlayerId}
+                    dragOverPlayerId={dragOverPlayerId}
+                    handleDragStart={handleDragStart}
+                    handleDragOver={handleDragOver}
+                    handleDragLeave={handleDragLeave}
+                    handleDrop={handleDrop}
+                    handleTouchStart={handleTouchStart}
+                    handleTouchEnd={handleTouchEnd}
+                    lineupTableBodyRef={lineupTableBodyRef}
                 />
             </div>
         </div>

@@ -1,5 +1,6 @@
 
 
+
 import { LineupPlayer, BatterStats, GameStatus, PartidoData, AppGlobalConfig, Formato, EMPTY_POSICION_PLACEHOLDER, TeamStats } from '../types';
 
 export const createEmptyBatterStats = (): BatterStats => ({ 
@@ -118,4 +119,31 @@ export const recalculateLineupOrder = (
         updatedLineup: newSortedLineup,
         newNextBatterForThisTeamId: finalNextBatterId,
     };
+};
+
+export const updateBattingOrderFromArrayOrder = (lineup: LineupPlayer[]): LineupPlayer[] => {
+    let activePlayerOrder = 1;
+    const activePlayers: LineupPlayer[] = [];
+    const benchPlayers: LineupPlayer[] = [];
+
+    // The order of the `lineup` parameter is the desired new order from the UI.
+    lineup.forEach(player => {
+        if (player.posicion !== 'BE' && player.posicion !== EMPTY_POSICION_PLACEHOLDER) {
+            activePlayers.push(player);
+        } else {
+            benchPlayers.push(player);
+        }
+    });
+
+    const updatedActivePlayers = activePlayers.map(player => ({
+        ...player,
+        ordenBate: activePlayerOrder++,
+    }));
+
+    const updatedBenchPlayers = benchPlayers.map(player => ({
+        ...player,
+        ordenBate: activePlayerOrder++,
+    }));
+    
+    return [...updatedActivePlayers, ...updatedBenchPlayers];
 };

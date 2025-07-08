@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Papa from 'papaparse';
 import { useNavigate } from 'react-router-dom';
@@ -9,7 +10,7 @@ import {
 } from '../constants';
 import useLocalStorage from './useLocalStorage';
 import { generateUUID } from '../utils/idGenerator';
-import { findNextBatterInLineup, recalculateLineupOrder, createEmptyBatterStats, createEmptyTeamStats } from '../utils/partidoUtils';
+import { findNextBatterInLineup, recalculateLineupOrder, createEmptyBatterStats, createEmptyTeamStats, updateBattingOrderFromArrayOrder } from '../utils/partidoUtils';
 
 const MAX_UNDO_HISTORY_SIZE = 10;
 
@@ -272,6 +273,7 @@ export const usePartidoManager = (initialPartidoData: PartidoData | null) => {
             basesAfterState: partidoState.gameStatus.bases.map(p => p?.lineupPlayerId ?? 'null').join('-'),
             runScored: runsScoredThisPlay,
             rbi: rbiCreditedThisPlay,
+            advancementReason: '',
             fechaDelPartido: partidoState.fecha,
             formatoDelPartidoDesc: formatoDesc,
             numeroDelPartido: partidoState.numeroJuego,
@@ -919,17 +921,13 @@ export const usePartidoManager = (initialPartidoData: PartidoData | null) => {
         });
     }, [currentPartido, currentPlayerForPlay, updateCurrentPartidoAndHistory, _getJugadaById, addToast]);
 
-    const handleConfirmRunnerAdvancementsFromHitModal = useCallback((advancements: { [lineupPlayerId: string]: number }, batter: LineupPlayer, hitType: 'H1' | 'H2' | 'H3' | 'HR', batterFinalDestBase: 1 | 2 | 3 | 4) => {
+    const handleConfirmRunnerAdvancementsFromHitModal = useCallback((advancements: { [lineupPlayerId: string]: number }, batter: LineupPlayer, hitType: 'H1' | 'H2' | 'H3', batterFinalDestBase: 1 | 2 | 3 | 4) => {
         updateCurrentPartidoAndHistory(prev => {
             const newState: PartidoData = JSON.parse(JSON.stringify(prev));
             const originalHalfInning = prev.gameStatus.currentHalfInning;
             const originalInningNumber = prev.gameStatus.actualInningNumber;
             const currentLineupKey = originalHalfInning === 'Top' ? 'lineupVisitante' : 'lineupLocal';
-
-            const nextBatterId = findNextBatterInLineup(newState[currentLineupKey], batter.id);
-            const nextBatterIdForTeamKey = originalHalfInning === 'Top' ? 'nextVisitorBatterLineupPlayerId' : 'nextLocalBatterLineupPlayerId';
-            newState.gameStatus[nextBatterIdForTeamKey] = nextBatterId;
-
+            
             const inningOfPlay = prev.gameStatus.actualInningNumber;
             const halfInningOfPlay = prev.gameStatus.currentHalfInning;
             const outsBeforePlay = prev.gameStatus.outs;
@@ -953,37 +951,38 @@ export const usePartidoManager = (initialPartidoData: PartidoData | null) => {
                 });
             }
     
+            const inningDidAdvance = newState.gameStatus.currentHalfInning !== originalHalfInning || newState.gameStatus.actualInningNumber !== originalInningNumber;
+    
             // --- 2. Log the primary Hit play ---
             _recordPlayInLog(newState, jugada, batter, 0, 0, undefined, basesBeforePlay, outsBeforePlay, playInstanceId, inningOfPlay, halfInningOfPlay);
     
-            // --- 3. Process advancements, scoring, and stats ---
-            const newBases: [PlayerOnBase | null, PlayerOnBase | null, PlayerOnBase | null] = [null, null, null];
-            
-            // Handle runners
-            Object.keys(advancements).forEach(runnerId => {
-                const runner = (basesBeforePlay as (PlayerOnBase|null)[]).flat().find((p: PlayerOnBase|null) => p && p.lineupPlayerId === runnerId);
-                const targetBase = advancements[runnerId];
-                if (!runner || targetBase === 0) return; // Skip runners put out
-    
-                if (targetBase === 4) { // Scored
-                    rbiForDisplay++; 
-                    _applySingleRunScoringLogic(newState, runner, batter.id, playInstanceId, inningOfPlay, halfInningOfPlay);
-                } else if (targetBase >= 1 && targetBase <= 3) {
-                    newBases[targetBase - 1] = runner;
+            // --- 3. Process advancements, scoring, and stats (only if inning is not over) ---
+            if (!inningDidAdvance) {
+                const newBases: [PlayerOnBase | null, PlayerOnBase | null, PlayerOnBase | null] = [null, null, null];
+                
+                // Handle runners
+                Object.keys(advancements).forEach(runnerId => {
+                    const runner = (basesBeforePlay as (PlayerOnBase|null)[]).flat().find((p: PlayerOnBase|null) => p && p.lineupPlayerId === runnerId);
+                    const targetBase = advancements[runnerId];
+                    if (!runner || targetBase === 0) return; // Skip runners put out
+        
+                    if (targetBase === 4) { // Scored
+                        rbiForDisplay++; 
+                        _applySingleRunScoringLogic(newState, runner, batter.id, playInstanceId, inningOfPlay, halfInningOfPlay);
+                    } else if (targetBase >= 1 && targetBase <= 3) {
+                        newBases[targetBase - 1] = runner;
+                    }
+                });
+        
+                // Handle batter
+                if (batterFinalDestBase >= 1 && batterFinalDestBase <= 3) {
+                    newBases[batterFinalDestBase - 1] = { lineupPlayerId: batter.id, jugadorId: batter.jugadorId, nombreJugador: batter.nombreJugador, reachedOnJugadaId: hitType, reachedOnPlayInstanceId: playInstanceId };
                 }
-            });
-    
-            // Handle batter
-            if (batterFinalDestBase === 4) { // Home run case should be handled by its own logic, but as a safeguard...
-                rbiForDisplay++;
-                _applySingleRunScoringLogic(newState, batter, batter.id, playInstanceId, inningOfPlay, halfInningOfPlay);
-            } else if (batterFinalDestBase >= 1 && batterFinalDestBase <= 3) {
-                newBases[batterFinalDestBase - 1] = { lineupPlayerId: batter.id, jugadorId: batter.jugadorId, nombreJugador: batter.nombreJugador, reachedOnJugadaId: hitType, reachedOnPlayInstanceId: playInstanceId };
+        
+                newState.gameStatus.bases = newBases;
             }
-    
-            newState.gameStatus.bases = newBases;
             
-            // Update stats for the hit
+            // Update batter's stats for the hit (happens regardless of inning ending)
             const batterIndex = newState[currentLineupKey].findIndex((p: LineupPlayer) => p.id === batter.id);
             if(batterIndex !== -1) {
                 const stats = newState[currentLineupKey][batterIndex].stats;
@@ -993,14 +992,18 @@ export const usePartidoManager = (initialPartidoData: PartidoData | null) => {
                 else if (hitType === 'H3') stats.triples += 1;
             }
             
-            const teamStatsKey = newState.gameStatus.currentHalfInning === 'Top' ? 'visitanteStats' : 'localStats';
+            // Update team's stats for the hit (happens regardless of inning ending)
+            const teamStatsKey = halfInningOfPlay === 'Top' ? 'visitanteStats' : 'localStats';
             newState[teamStatsKey].hits += 1;
     
             // --- 4. Finalize UI elements and next batter ---
             const playCell = _createPlayInInningCell(jugada, rbiForDisplay, playInstanceId);
             _addPlayToLineupCell(newState[currentLineupKey], batter.id, inningOfPlay, playCell);
             
-            if (newState.gameStatus.currentHalfInning === originalHalfInning && newState.gameStatus.actualInningNumber === originalInningNumber) {
+            if (!inningDidAdvance) {
+                const nextBatterId = findNextBatterInLineup(newState[currentLineupKey], batter.id);
+                const nextBatterIdForTeamKey = originalHalfInning === 'Top' ? 'nextVisitorBatterLineupPlayerId' : 'nextLocalBatterLineupPlayerId';
+                newState.gameStatus[nextBatterIdForTeamKey] = nextBatterId;
                 newState.gameStatus.currentBatterLineupPlayerId = nextBatterId;
             }
     
@@ -1401,7 +1404,7 @@ export const usePartidoManager = (initialPartidoData: PartidoData | null) => {
     
         const isNewPlayer = player.id.startsWith('transient-');
     
-        if (newPosition !== 'BE' && newPosition !== EMPTY_POSICION_PLACEHOLDER) {
+        if (newPosition !== 'BE' && newPosition !== EMPTY_POSICION_PLACEHOLDER && newPosition !== 'DH') {
             const lineupKey = team === 'visitante' ? 'lineupVisitante' : 'lineupLocal';
             const currentLineup = currentPartido[lineupKey];
             const existingPlayerInPos = currentLineup.find(p => p.posicion === newPosition && p.id !== player.id);
@@ -1585,11 +1588,6 @@ export const usePartidoManager = (initialPartidoData: PartidoData | null) => {
             const currentLineupKey = originalHalfInning === 'Top' ? 'lineupVisitante' : 'lineupLocal';
 
             const batter = batterFromState;
-
-            const nextBatterId = findNextBatterInLineup(newState[currentLineupKey], batter.id);
-            const nextBatterIdKey = originalHalfInning === 'Top' ? 'nextVisitorBatterLineupPlayerId' : 'nextLocalBatterLineupPlayerId';
-            newState.gameStatus[nextBatterIdKey] = nextBatterId;
-
             const inningOfPlay = prev.gameStatus.actualInningNumber;
             const halfInningOfPlay = prev.gameStatus.currentHalfInning;
             const outsBeforePlay = prev.gameStatus.outs;
@@ -1600,15 +1598,13 @@ export const usePartidoManager = (initialPartidoData: PartidoData | null) => {
             if (result.batterAdvancement === 0) playersOut.add(batter.id);
             Object.entries(result.runnerAdvancements).forEach(([id, dest]) => { if (dest === 0) playersOut.add(id); });
             const outsOnPlay = playersOut.size;
-
             const isBatterOut = result.batterAdvancement === 0;
 
             _calculateOutsUpdate(newState, outsOnPlay, jugada, isBatterOut ? batter : null);
+            const inningDidAdvance = newState.gameStatus.currentHalfInning !== originalHalfInning || newState.gameStatus.actualInningNumber !== originalInningNumber;
             
-            // Record the primary play itself
             _recordPlayInLog(newState, jugada, batter, 0, 0, undefined, basesBeforePlay, outsBeforePlay, playInstanceId, inningOfPlay, halfInningOfPlay);
             
-            // Log individual outs for runners
             const outRunnerBaseJugada = _getJugadaById('OUT_RUNNER_BASE');
             if (outRunnerBaseJugada) {
                 Object.entries(result.runnerAdvancements).forEach(([runnerId, destBase], index) => {
@@ -1623,7 +1619,6 @@ export const usePartidoManager = (initialPartidoData: PartidoData | null) => {
             
             const batterIndex = newState[currentLineupKey].findIndex((p: LineupPlayer) => p.id === batter.id);
             if (batterIndex > -1) {
-                // FC, DP, and TP are always an At Bat and Plate Appearance
                 newState[currentLineupKey][batterIndex].stats.atBats += 1;
                 newState[currentLineupKey][batterIndex].stats.plateAppearances += 1;
             }
@@ -1631,32 +1626,31 @@ export const usePartidoManager = (initialPartidoData: PartidoData | null) => {
             const playCell = _createPlayInInningCell(jugada, 0, playInstanceId);
             _addPlayToLineupCell(newState[currentLineupKey], batter.id, inningOfPlay, playCell);
             
-            const newBases: [PlayerOnBase | null, PlayerOnBase | null, PlayerOnBase | null] = [null, null, null];
-            
-            // Handle Runners
-            Object.entries(result.runnerAdvancements).forEach(([runnerId, destBase]) => {
-                const runner = basesBeforePlay.flat().find(p => p?.lineupPlayerId === runnerId);
-                if (!runner || destBase === 0) return; // Skip outed runners
+            if (!inningDidAdvance) {
+                const newBases: [PlayerOnBase | null, PlayerOnBase | null, PlayerOnBase | null] = [null, null, null];
                 
-                if (destBase === 4) { // Scored
-                    const outOnPlay = result.primaryOutPlayerId ? result.primaryOutPlayerId !== runnerId : true;
-                    const rbiPlayerId = outsOnPlay < 2 && outOnPlay ? batter.id : null;
-                    _applySingleRunScoringLogic(newState, runner, rbiPlayerId, playInstanceId, inningOfPlay, halfInningOfPlay);
-                } else if (destBase >= 1 && destBase <= 3) {
-                    newBases[destBase - 1] = runner;
+                Object.entries(result.runnerAdvancements).forEach(([runnerId, destBase]) => {
+                    const runner = basesBeforePlay.flat().find(p => p?.lineupPlayerId === runnerId);
+                    if (!runner || destBase === 0) return;
+                    
+                    if (destBase === 4) {
+                        const outOnPlay = result.primaryOutPlayerId ? result.primaryOutPlayerId !== runnerId : true;
+                        const rbiPlayerId = outsOnPlay < 2 && outOnPlay ? batter.id : null;
+                        _applySingleRunScoringLogic(newState, runner, rbiPlayerId, playInstanceId, inningOfPlay, halfInningOfPlay);
+                    } else if (destBase >= 1 && destBase <= 3) {
+                        newBases[destBase - 1] = runner;
+                    }
+                });
+                
+                if (result.batterAdvancement >= 1 && result.batterAdvancement <= 3) {
+                    newBases[result.batterAdvancement-1] = { lineupPlayerId: batter.id, jugadorId: batter.jugadorId, nombreJugador: batter.nombreJugador, reachedOnPlayInstanceId: playInstanceId, reachedOnJugadaId: jugada.jugada };
                 }
-            });
-            
-            // Handle Batter
-            if (result.batterAdvancement === 4) { // Batter Scored
-                _applySingleRunScoringLogic(newState, batter, null, playInstanceId, inningOfPlay, halfInningOfPlay);
-            } else if (result.batterAdvancement >= 1 && result.batterAdvancement <= 3) { // Batter reached base 1, 2, or 3
-                newBases[result.batterAdvancement-1] = { lineupPlayerId: batter.id, jugadorId: batter.jugadorId, nombreJugador: batter.nombreJugador, reachedOnPlayInstanceId: playInstanceId, reachedOnJugadaId: jugada.jugada };
-            }
 
-            newState.gameStatus.bases = newBases;
+                newState.gameStatus.bases = newBases;
 
-            if (newState.gameStatus.currentHalfInning === originalHalfInning && newState.gameStatus.actualInningNumber === originalInningNumber) {
+                const nextBatterId = findNextBatterInLineup(newState[currentLineupKey], batter.id);
+                const nextBatterIdKey = originalHalfInning === 'Top' ? 'nextVisitorBatterLineupPlayerId' : 'nextLocalBatterLineupPlayerId';
+                newState.gameStatus[nextBatterIdKey] = nextBatterId;
                 newState.gameStatus.currentBatterLineupPlayerId = nextBatterId;
             }
 
@@ -1856,6 +1850,73 @@ export const usePartidoManager = (initialPartidoData: PartidoData | null) => {
         });
     }, [updateCurrentPartidoAndHistory, setGamePhase, addToast]);
 
+    const handleMovePlayerInLineup = useCallback((sourceId: string, targetId: string, team: 'visitante' | 'local') => {
+        updateCurrentPartidoAndHistory(prev => {
+            if (!prev) return prev;
+            const lineupKey = team === 'visitante' ? 'lineupVisitante' : 'lineupLocal';
+            const lineup = prev[lineupKey] ? [...prev[lineupKey]!] : [];
+            if (lineup.length === 0 || sourceId === targetId) return prev;
+    
+        const sourceIndex = lineup.findIndex(p => p.id === sourceId);
+        const targetIndex = lineup.findIndex(p => p.id === targetId);
+        if (sourceIndex === -1 || targetIndex === -1) return prev;
+
+        const items = Array.from(lineup);
+        const [reorderedItem] = items.splice(sourceIndex, 1);
+        items.splice(targetIndex, 0, reorderedItem);
+        
+        const updatedLineup = updateBattingOrderFromArrayOrder(items);
+
+        const nextBatterKey = team === 'visitante' ? 'nextVisitorBatterLineupPlayerId' : 'nextLocalBatterLineupPlayerId';
+        const updatedNextBatterId = findNextBatterInLineup(updatedLineup, prev.gameStatus[nextBatterKey]);
+
+        const newState = { ...prev, [lineupKey]: updatedLineup };
+        newState.gameStatus[nextBatterKey] = updatedNextBatterId;
+        
+        return newState;
+        });
+    }, [updateCurrentPartidoAndHistory]);
+
+    const handleMovePlayerInBattingOrder = useCallback((playerId: string, direction: 'up' | 'down', team: 'visitante' | 'local') => {
+        updateCurrentPartidoAndHistory(prev => {
+            if (!prev) return prev;
+            const lineupKey = team === 'visitante' ? 'lineupVisitante' : 'lineupLocal';
+            let lineup = prev[lineupKey] ? [...prev[lineupKey]!] : [];
+            if (lineup.length <= 1) return prev;
+    
+            const activePlayers = lineup.filter(p => p.posicion !== 'BE' && p.posicion !== EMPTY_POSICION_PLACEHOLDER);
+            const benchPlayers = lineup.filter(p => p.posicion === 'BE' || p.posicion === EMPTY_POSICION_PLACEHOLDER);
+    
+            const activePlayerIndex = activePlayers.findIndex(p => p.id === playerId);
+            if (activePlayerIndex === -1) return prev;
+    
+            let newIndex = activePlayerIndex;
+            if (direction === 'up' && activePlayerIndex > 0) {
+                newIndex = activePlayerIndex - 1;
+            } else if (direction === 'down' && activePlayerIndex < activePlayers.length - 1) {
+                newIndex = activePlayerIndex + 1;
+            }
+    
+            if (newIndex !== activePlayerIndex) {
+                const [playerToMove] = activePlayers.splice(activePlayerIndex, 1);
+                activePlayers.splice(newIndex, 0, playerToMove);
+                
+                const newFullLineup = [...activePlayers, ...benchPlayers];
+                const updatedLineupWithNewOrderNumbers = updateBattingOrderFromArrayOrder(newFullLineup);
+    
+                const nextBatterKey = team === 'visitante' ? 'nextVisitorBatterLineupPlayerId' : 'nextLocalBatterLineupPlayerId';
+                const updatedNextBatterId = findNextBatterInLineup(updatedLineupWithNewOrderNumbers, prev.gameStatus[nextBatterKey]);
+    
+                const newState = { ...prev, [lineupKey]: updatedLineupWithNewOrderNumbers };
+                newState.gameStatus[nextBatterKey] = updatedNextBatterId;
+                
+                return newState;
+            }
+            return prev;
+        });
+    }, [updateCurrentPartidoAndHistory]);
+
+
     return {
         currentPartido,
         setCurrentPartido,
@@ -1934,6 +1995,8 @@ export const usePartidoManager = (initialPartidoData: PartidoData | null) => {
         addToast,
         removeToast,
         navigate, // pass navigate through context if needed
-        handleResetGame
+        handleResetGame,
+        handleMovePlayerInBattingOrder,
+        handleMovePlayerInLineup,
     };
 };

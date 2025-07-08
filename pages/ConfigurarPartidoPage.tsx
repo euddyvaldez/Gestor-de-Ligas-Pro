@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useCallback, ChangeEvent, useRef, DragEvent, TouchEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Papa from 'papaparse';
@@ -15,10 +13,11 @@ import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import Modal from '../components/ui/Modal';
-import { findNextBatterInLineup, recalculateLineupOrder, createEmptyBatterStats, createEmptyGameStatus, initialPartidoData, createEmptyTeamStats } from '../utils/partidoUtils';
+import { findNextBatterInLineup, recalculateLineupOrder, createEmptyBatterStats, createEmptyGameStatus, initialPartidoData, createEmptyTeamStats, updateBattingOrderFromArrayOrder } from '../utils/partidoUtils';
 import PlayerSelectionModal from '../components/partidos/PlayerSelectionModal';
 import PositionSelectionModal from '../components/partidos/PositionSelectionModal';
 import IconButton, { ArrowUpTriangleIcon, ArrowDownTriangleIcon } from '../components/ui/IconButton';
+import ConfirmationModal from '../components/ui/ConfirmationModal';
 
 
 interface PositionConflictDetails {
@@ -45,7 +44,7 @@ const ConfigurarPartidoPage: React.FC = () => {
   
   const [isPositionConflictModalOpen, setIsPositionConflictModalOpen] = useState(false);
   const [positionConflictDetails, setPositionConflictDetails] = useState<PositionConflictDetails | null>(null);
-  const [isPositionMissingModalOpen, setIsPositionMissingModalOpen] = useState(false);
+  
   const [playersMissingPositionInfo, setPlayersMissingPositionInfo] = useState<{ teamName: string, players: string[] }[]>([]);
   
   const [draggingPlayerId, setDraggingPlayerId] = useState<string | null>(null);
@@ -65,6 +64,10 @@ const ConfigurarPartidoPage: React.FC = () => {
   const [isFieldsMissingModalOpen, setIsFieldsMissingModalOpen] = useState(false);
   const [missingFieldsList, setMissingFieldsList] = useState<string[]>([]);
   const lineupTableBodyRef = useRef<HTMLTableSectionElement>(null);
+  const [isConfirmStartWithoutPositionsOpen, setIsConfirmStartWithoutPositionsOpen] = useState(false);
+
+  const [isConfirmContinueWithoutPositionsOpen, setIsConfirmContinueWithoutPositionsOpen] = useState(false);
+  const [playersMissingPositionInfoForContinue, setPlayersMissingPositionInfoForContinue] = useState<{ teamName: string, players: string[] }[]>([]);
 
 
   const navigate = useNavigate();
@@ -200,44 +203,24 @@ const ConfigurarPartidoPage: React.FC = () => {
             return;
         }
         setSetupStep(2);
-    } else if (setupStep === 4) { 
-        const visitorLineup = tempSetupData.lineupVisitante || [];
-        const playersWithoutPos = visitorLineup.filter(p => p.posicion === EMPTY_POSICION_PLACEHOLDER).map(p => p.nombreJugador);
-        if (playersWithoutPos.length > 0) {
-            setPlayersMissingPositionInfo([{ teamName: tempSetupData.nombreEquipoVisitante || "Visitante", players: playersWithoutPos }]);
-            setIsPositionMissingModalOpen(true);
-            return;
-        }
-        setSetupStep(5); 
+    } else if (setupStep === 4) {
+      const visitorLineup = tempSetupData.lineupVisitante || [];
+      const playersWithoutPos = visitorLineup.filter(p => p.posicion === EMPTY_POSICION_PLACEHOLDER).map(p => p.nombreJugador);
+      if (playersWithoutPos.length > 0) {
+          setPlayersMissingPositionInfoForContinue([{ teamName: tempSetupData.nombreEquipoVisitante || "Visitante", players: playersWithoutPos }]);
+          setIsConfirmContinueWithoutPositionsOpen(true);
+      } else {
+          setSetupStep(5);
+      }
     }
   };
 
-  const handleStartGame = () => {
+  const _startGameLogic = () => {
     if (!tempSetupData.nombreEquipoVisitante?.trim() || !tempSetupData.nombreEquipoLocal?.trim()) {
         alert("Por favor, complete los detalles del juego, incluyendo nombres de equipo.");
         return;
     }
-    
-    const visitorLineup = tempSetupData.lineupVisitante || [];
-    const localLineup = tempSetupData.lineupLocal || [];
-    
-    const visitorPlayersWithoutPos = visitorLineup.filter(p => p.posicion === EMPTY_POSICION_PLACEHOLDER).map(p => p.nombreJugador);
-    const localPlayersWithoutPos = localLineup.filter(p => p.posicion === EMPTY_POSICION_PLACEHOLDER).map(p => p.nombreJugador);
-    
-    const missingInfo: { teamName: string, players: string[] }[] = [];
-    if (visitorPlayersWithoutPos.length > 0) {
-        missingInfo.push({ teamName: tempSetupData.nombreEquipoVisitante || "Visitante", players: visitorPlayersWithoutPos });
-    }
-    if (localPlayersWithoutPos.length > 0) {
-        missingInfo.push({ teamName: tempSetupData.nombreEquipoLocal || "Local", players: localPlayersWithoutPos });
-    }
 
-    if (missingInfo.length > 0) {
-        setPlayersMissingPositionInfo(missingInfo);
-        setIsPositionMissingModalOpen(true);
-        return;
-    }
-    
     const selectedFormato = formatos.find(f => f.codigo === tempSetupData.formatoJuegoId);
     const maxInningsForGame = selectedFormato?.cantidadInning || tempSetupData.maxInnings || appConfig.defaultMaxInnings;
 
@@ -245,16 +228,9 @@ const ConfigurarPartidoPage: React.FC = () => {
     
     const lineupVisitanteFromSetup = tempSetupData.lineupVisitante || [];
     const lineupLocalFromSetup = tempSetupData.lineupLocal || [];
-
-    if (lineupVisitanteFromSetup.filter(p => p.posicion !== 'BE' && p.posicion !== EMPTY_POSICION_PLACEHOLDER).length === 0 || 
-        lineupLocalFromSetup.filter(p => p.posicion !== 'BE' && p.posicion !== EMPTY_POSICION_PLACEHOLDER).length === 0) {
-        alert("Ambos lineups deben tener al menos un jugador activo (no en BE o sin posición) antes de comenzar el partido.");
-        return;
-    }
     
     const firstVisitorBatterId = findNextBatterInLineup(lineupVisitanteFromSetup, null);
     const firstLocalBatterId = findNextBatterInLineup(lineupLocalFromSetup, null);
-
 
     if (importedRegistrosJuego) { 
         if (lineupVisitanteFromSetup.length === 0 || lineupLocalFromSetup.length === 0) {
@@ -348,6 +324,30 @@ const ConfigurarPartidoPage: React.FC = () => {
     
     localStorage.setItem(PARTIDO_EN_CURSO_KEY, JSON.stringify(gameDataToSet));
     navigate('/partidos');
+  };
+
+  const handleStartGame = () => {
+    const visitorLineup = tempSetupData.lineupVisitante || [];
+    const localLineup = tempSetupData.lineupLocal || [];
+    
+    const visitorPlayersWithoutPos = visitorLineup.filter(p => p.posicion === EMPTY_POSICION_PLACEHOLDER).map(p => p.nombreJugador);
+    const localPlayersWithoutPos = localLineup.filter(p => p.posicion === EMPTY_POSICION_PLACEHOLDER).map(p => p.nombreJugador);
+    
+    const missingInfo: { teamName: string, players: string[] }[] = [];
+    if (visitorPlayersWithoutPos.length > 0) {
+        missingInfo.push({ teamName: tempSetupData.nombreEquipoVisitante || "Visitante", players: visitorPlayersWithoutPos });
+    }
+    if (localPlayersWithoutPos.length > 0) {
+        missingInfo.push({ teamName: tempSetupData.nombreEquipoLocal || "Local", players: localPlayersWithoutPos });
+    }
+
+    if (missingInfo.length > 0) {
+        setPlayersMissingPositionInfo(missingInfo);
+        setIsConfirmStartWithoutPositionsOpen(true);
+        return;
+    }
+    
+    _startGameLogic();
   };
 
   const handleChangePlayerPosition = (playerId: string, newPosition: string, team: 'visitante' | 'local') => {
@@ -541,38 +541,6 @@ const ConfigurarPartidoPage: React.FC = () => {
     setTeamForModalSelection(null);
   };
 
-    const updateBattingOrder = (lineup: LineupPlayer[]): LineupPlayer[] => {
-        let activePlayerOrder = 1;
-        const activePlayers: LineupPlayer[] = [];
-        const benchPlayers: LineupPlayer[] = [];
-    
-        // Separate active and bench players based on their current order in the array.
-        // The order of the `lineup` parameter is the desired new order from the UI.
-        lineup.forEach(player => {
-            if (player.posicion !== 'BE' && player.posicion !== EMPTY_POSICION_PLACEHOLDER) {
-                activePlayers.push(player);
-            } else {
-                benchPlayers.push(player);
-            }
-        });
-    
-        // Re-assign batting order for active players based on their new array position.
-        const updatedActivePlayers = activePlayers.map(player => ({
-            ...player,
-            ordenBate: activePlayerOrder++,
-        }));
-    
-        // Re-assign batting order for bench players (they come after active players).
-        // Their relative order among themselves is preserved from the `lineup` array.
-        const updatedBenchPlayers = benchPlayers.map(player => ({
-            ...player,
-            ordenBate: activePlayerOrder++,
-        }));
-        
-        // Combine them back. Active players are first (batting), then bench players.
-        return [...updatedActivePlayers, ...updatedBenchPlayers];
-    };
-
   const movePlayerInLineup = useCallback((sourceId: string, targetId: string, team: 'visitante' | 'local') => {
     setTempSetupData(prev => {
         if (!prev) return prev;
@@ -589,7 +557,7 @@ const ConfigurarPartidoPage: React.FC = () => {
         const [reorderedItem] = items.splice(sourceIndex, 1);
         items.splice(targetIndex, 0, reorderedItem);
         
-        const updatedLineup = updateBattingOrder(items);
+        const updatedLineup = updateBattingOrderFromArrayOrder(items);
         return { ...prev, [lineupKey]: updatedLineup };
     });
   }, []);
@@ -657,7 +625,7 @@ const ConfigurarPartidoPage: React.FC = () => {
         const [playerToMove] = items.splice(playerIndex, 1);
         items.splice(newIndex, 0, playerToMove);
         
-        const updatedLineup = updateBattingOrder(items);
+        const updatedLineup = updateBattingOrderFromArrayOrder(items);
         return { ...prev, [lineupKey]: updatedLineup };
       }
       return prev;
@@ -846,22 +814,58 @@ const ConfigurarPartidoPage: React.FC = () => {
         )}
       </Modal>
 
-      <Modal isOpen={isPositionMissingModalOpen} onClose={() => setIsPositionMissingModalOpen(false)} title="Posiciones Faltantes">
-          <div className="space-y-3">
-              <p className="text-red-600 font-semibold">Los siguientes jugadores no tienen una posición asignada. Todos los jugadores activos deben tener una posición (excepto 'BE' - Banca).</p>
-              {playersMissingPositionInfo.map(teamInfo => (
-                  <div key={teamInfo.teamName}>
-                      <h4 className="font-medium text-gray-700">{teamInfo.teamName}:</h4>
-                      <ul className="list-disc list-inside text-sm text-gray-600 pl-4">
-                          {teamInfo.players.map(playerName => <li key={playerName}>{playerName}</li>)}
-                      </ul>
-                  </div>
-              ))}
-              <div className="flex justify-end pt-3">
-                  <Button variant="primary" onClick={() => setIsPositionMissingModalOpen(false)}>Entendido</Button>
+      <ConfirmationModal
+        isOpen={isConfirmContinueWithoutPositionsOpen}
+        onClose={() => setIsConfirmContinueWithoutPositionsOpen(false)}
+        onConfirm={() => {
+            setSetupStep(5);
+            setIsConfirmContinueWithoutPositionsOpen(false);
+        }}
+        title="Continuar sin Posiciones Asignadas"
+        message={(
+            <div className="space-y-3">
+                <p className="font-semibold">Algunos jugadores del equipo visitante no tienen posición.</p>
+                <p>¿Desea continuar a la configuración del equipo local?</p>
+                {playersMissingPositionInfoForContinue.map(teamInfo => (
+                    <div key={teamInfo.teamName}>
+                        <h4 className="font-medium text-gray-700">{teamInfo.teamName}:</h4>
+                        <ul className="list-disc list-inside text-sm text-gray-600 pl-4">
+                            {teamInfo.players.map(playerName => <li key={playerName}>{playerName}</li>)}
+                        </ul>
+                    </div>
+                ))}
+            </div>
+        )}
+        confirmButtonText="Sí, continuar"
+        confirmButtonVariant="primary"
+      />
+
+
+      <ConfirmationModal
+          isOpen={isConfirmStartWithoutPositionsOpen}
+          onClose={() => setIsConfirmStartWithoutPositionsOpen(false)}
+          onConfirm={() => {
+              _startGameLogic();
+              setIsConfirmStartWithoutPositionsOpen(false);
+          }}
+          title="Comenzar Partido sin Posiciones Asignadas"
+          message={(
+              <div className="space-y-3">
+                  <p className="font-semibold">Algunos jugadores no tienen posición. ¿Desea continuar y asignarlas durante el juego?</p>
+                  {playersMissingPositionInfo.map(teamInfo => (
+                      <div key={teamInfo.teamName}>
+                          <h4 className="font-medium text-gray-700">{teamInfo.teamName}:</h4>
+                          <ul className="list-disc list-inside text-sm text-gray-600 pl-4">
+                              {teamInfo.players.map(playerName => <li key={playerName}>{playerName}</li>)}
+                          </ul>
+                      </div>
+                  ))}
               </div>
-          </div>
-      </Modal>
+          )}
+          confirmButtonText="Sí, comenzar partido"
+          confirmButtonVariant="warning"
+      />
+
 
       <Modal isOpen={isFieldsMissingModalOpen} onClose={() => setIsFieldsMissingModalOpen(false)} title="Campos Obligatorios Faltantes">
           <div className="space-y-3">
